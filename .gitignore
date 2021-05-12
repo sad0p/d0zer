@@ -1,5 +1,4 @@
 d0zer
-d0zer.go
 elf64
 fake_binary
 helloworld
@@ -24,7 +23,10 @@ non-destructive-payload
 non-destructive-payload.asm
 non-destructive-payload.o
 output
-README.md
 test
 test.go
 epilogue
+helloworld32_dynamic
+helloworld32_static
+helloworld64_dynamic
+helloworld64_static

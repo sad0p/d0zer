@@ -5,7 +5,7 @@ import(
 	"bytes"
 )
 
-func modEpilogue64(pSize int32, pEntry uint64, oEntry uint64) []byte {
+func ModEpilogue64(pSize int32, pEntry uint64, oEntry uint64) []byte {
 	/*
 	epilog := []byte{
 		0xe8, 0x12, 0x00, 0x00, 0x00, 		//call   401061 <get_eip>
@@ -65,6 +65,7 @@ func modEpilogue64(pSize int32, pEntry uint64, oEntry uint64) []byte {
 	return shellcode.Bytes()
 
 }
+/*
 func main() {
 
 	shellcode := modEpilogue64(0x4f, uint64(0x173d1), uint64(0x5b20))
@@ -75,3 +76,4 @@ func main() {
 	fmt.Println("]")
 
 }
+*/

@@ -22,15 +22,13 @@ func modEpilogue64(pSize int32, pEntry uint64, oEntry uint64) []byte {
 	encPsize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(encPsize, uint32(pSize))
 	var numZeros uint32 = 0 
-	if ! (pSize <= 0xff) {
-		for _, b := range encPsize {
-			fmt.Printf("%02x\n", b)
-			if b != 0x00 {
-				numZeros++
-			}
+	for _, b := range encPsize {
+		fmt.Printf("%02x\n", b)
+		if b != 0x00 {
+			numZeros++
 		}
-		incOff += (numZeros - 1)
 	}
+	incOff += (numZeros - 1)
 
 	var shellcode bytes.Buffer;
 	shellcode.Write([]byte{0xe8}) //call instruction

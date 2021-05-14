@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"encoding/binary"
+	"log"
 )
 
 const (
@@ -80,7 +81,6 @@ var payload64 = []byte{
 	*/
 }
 
-var dummypayload = []byte{0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44}
 
 func isElf(magic []byte) bool {
 	return !(magic[0] != '\x7f' || magic[1] != 'E' || magic[2] != 'L' || magic[3] != 'F')
@@ -106,7 +106,10 @@ func main() {
 	origFile := os.Args[1]
 
 	origFileHandle, err := os.Open(origFile)
-	checkError(err)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	defer origFileHandle.Close()
 
 	var magic [4]byte
@@ -114,7 +117,7 @@ func main() {
 
 	if !isElf(magic[:4]) {
 		fmt.Println("This is not an Elf binary")
-		os.Exit(FAILURE)
+		return
 	}
 
 	fStat, err := origFileHandle.Stat()

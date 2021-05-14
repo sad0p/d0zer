@@ -1,7 +1,6 @@
-package d0zer
+package main
 
 import(
-	"fmt"
 	"encoding/binary"
 	"bytes"
 )
@@ -24,7 +23,6 @@ func modEpilogue64(pSize int32, pEntry uint64, oEntry uint64) []byte {
 	binary.LittleEndian.PutUint32(encPsize, uint32(pSize))
 	var numZeros uint32 = 0 
 	for _, b := range encPsize {
-		fmt.Printf("%02x\n", b)
 		if b != 0x00 {
 			numZeros++
 		}

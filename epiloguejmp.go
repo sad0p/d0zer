@@ -64,15 +64,3 @@ func modEpilogue64(pSize int32, pEntry uint64, oEntry uint64) []byte {
 	return shellcode.Bytes()
 
 }
-/*
-func main() {
-
-	shellcode := modEpilogue64(0x4f, uint64(0x173d1), uint64(0x5b20))
-	fmt.Print("[")
-	for _, hex := range shellcode {
-		fmt.Printf("0x%02x ", hex)
-	}
-	fmt.Println("]")
-
-}
-*/

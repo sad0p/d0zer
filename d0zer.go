@@ -29,10 +29,6 @@ import (
 )
 
 const (
-	SUCCESS       int    = 0
-	FAILURE       int    = 1
-	x64_PAGE_SIZE uint64 = 4096 
-	x86_PAGE_SIZE int    = 4096
 	PAGE_SIZE     int    = 4096
 )
 

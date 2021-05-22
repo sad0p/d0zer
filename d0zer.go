@@ -93,13 +93,6 @@ func checkError(e error) {
 	}
 }
 
-func usage() {
-	fmt.Println("Usage: ", os.Args[0], "<target_file>")
-	os.Exit(FAILURE)
-}
-
-
-
 func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 	fStat, err := origFileHandle.Stat()
 	if err != nil {

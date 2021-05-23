@@ -7,6 +7,7 @@ import(
 
 func modEpilogue64(pSize int32, pEntry uint64, oEntry uint64) []byte {
 	/*
+	;Example of what the final payload can look like
 	epilog := []byte{
 		0xe8, 0x12, 0x00, 0x00, 0x00, 		//call   401061 <get_eip>
 		0x48, 0x83, 0xe8, 0x4f, 			//sub    $0x4f,%rax

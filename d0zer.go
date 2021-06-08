@@ -103,6 +103,7 @@ var defaultPayload64 = []byte{
 
 var defaultPayload32 = []byte{
 	0xeb, 0x00,	                				//jmp    8049002 <message>
+	//08049002 <message>:
 	0xe8, 0x2b, 0x00, 0x00, 0x00,       		//call   8049032 <shellcode>
 	0x68, 0x65, 0x6c, 0x6c, 0x6f,       		//push   $0x6f6c6c65
 	0x20, 0x2d, 0x2d, 0x20, 0x74, 68,    		//and    %ch,0x6874202d
@@ -117,7 +118,8 @@ var defaultPayload32 = []byte{
 	0x6f,                   					//outsl  %ds:(%esi),(%dx)
 	0x61,                   					//popa   
 	0x64,                   					//fs
-	0x0a,                   					//.byte 0xa								
+	0x0a,                   					//.byte 0xa
+	//08049032 <shellcode>:								
  	0x59,                   					//pop    %ecx
  	0xbb, 0x01, 0x00, 0x00, 0x00,       		//mov    $0x1,%ebx
  	0xba, 0x2a, 0x00, 0x00, 0x00,       		//mov    $0x2a,%edx

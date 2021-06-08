@@ -5,7 +5,11 @@ import(
 	"bytes"
 )
 
-func modEpilogue64(pSize int32, pEntry uint64, oEntry uint64) []byte {
+/*
+	x64 - pEntry uint64 / oEntry uint64
+	x86 - pEntry uint32 / oEntry uint32
+*/
+func modEpilogue(pSize int32, pEntry interface{}, oEntry interface{}) []byte {
 	/*
 	;Example of what the final payload can look like
 	epilog := []byte{
@@ -40,28 +44,55 @@ func modEpilogue64(pSize int32, pEntry uint64, oEntry uint64) []byte {
 	//write offset for call instruction
 	shellcode.Write(encOff)
 
-	//write sub rax, encPsize
-	shellcode.Write([]byte{0x48, 0x83, 0xe8})
+	// (x64) - sub rax, encPsize
+	// (x86) - sub eax, encPsize
+	switch oEntry.(type) {
+	case uint64:
+		shellcode.Write([]byte{0x48, 0x83, 0xe8})
+	case uint32:
+		shellcode.Write([]byte{0x83, 0xe8})
+	} 
 	shellcode.Write(encPsize[:numZeros])
-
-	//write sub rax, pEntry
+	
+	//	(x64) - sub rax, pEntry
+	//	(x86) - sub eax, pEntry
 	encPentry := make([]byte, 4)
-	binary.LittleEndian.PutUint32(encPentry, uint32(pEntry))
-	shellcode.Write([]byte{0x48, 0x2d})
+	switch v := pEntry.(type) {
+	case uint64:
+		binary.LittleEndian.PutUint32(encPentry, uint32(v))
+		shellcode.Write([]byte{0x48, 0x2d})
+	case uint32:
+		binary.LittleEndian.PutUint32(encPentry, v)
+		shellcode.Write([]byte{0x83, 0xe8})
+	}
 	shellcode.Write(encPentry)
 
-	//write add rax, oEntry
+	// (x64) - add rax, oEntry
+	// (x86) - add eax, oEntry
 	encOentry := make([]byte, 4)
-	binary.LittleEndian.PutUint32(encOentry, uint32(oEntry))
-	shellcode.Write([]byte{0x48, 0x05})
+	switch v := oEntry.(type) {
+	case uint64:
+		binary.LittleEndian.PutUint32(encOentry, uint32(v))
+		shellcode.Write([]byte{0x48, 0x05})
+	case uint32:
+		binary.LittleEndian.PutUint32(encOentry, v)
+		shellcode.Write([]byte{0x05})
+	}
 	shellcode.Write(encOentry)
 
-	
-	/* --- write -- */
-	//jmp rax
-	//mov rax, [rsp]
-	//ret
-	shellcode.Write([]byte{0xff, 0xe0, 0x48, 0x8b, 0x04, 0x24, 0xc3})
+	switch oEntry.(type) {
+	case uint64:
+		/* --- write -- */
+		//jmp rax
+		//mov rax, [rsp]
+		//ret
+		shellcode.Write([]byte{0xff, 0xe0, 0x48, 0x8b, 0x04, 0x24, 0xc3})
+	case uint32:
+		/* --- write -- */
+		//jmp eax
+		//mov eax, [esp]
+		//ret
+		shellcode.Write([]byte{0xff, 0xe0, 0x8b, 0x04, 0x24, 0xc3})
+	}
 	return shellcode.Bytes()
-
 }

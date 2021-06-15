@@ -51,6 +51,7 @@ type targetBin struct {
 
 var preserve64 = []byte{
 	0x50,       //push   %rax
+	0x51,		//push   %rcx
 	0x53,       //push   %rbx
 	0x52,       //push   %rdx
 	0x56,       //push   %rsi
@@ -82,6 +83,7 @@ var restoration64 = []byte{
 	0x5e, //pop    %rsi
 	0x5a, //pop    %rdx
 	0x5b, //pop    %rbx
+	0x59, //pop    %rcx
 	0x58, //pop    %rax
 }
 

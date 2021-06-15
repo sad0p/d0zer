@@ -1,2 +1,2 @@
 # d0zer
-Elf binary infector written in Golang
+Elf binary infector written in Golang. It can be used for infecting executables of type ET_DYN and ET_EXEC with a payload of your creation. Utilizing the classic elf text segment padding algorithm by Silvio Cesar, your payload (parasite) will run before native functionality of the binary.

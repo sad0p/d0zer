@@ -111,10 +111,23 @@ Getting payload from an ELF binary .text segment is not yet supported
 In the event you don't like the routines d0zer add to your code the following flags can be utilized, however your payload
 should handle any consequences that come comes from removing them.
 
-The `-noPreserve` flag removes the general purpose register routine. For x86_32 targets this is accomplished via a `pushad` instruction. For x86_64 targets all general purpose registers are manually pushed onto the stack as the the `pushad` instruction on x86_64 is not valid. The overall purpose of this routine is to preserve register states after execution your payload, when control is handed back to libc runtime routine (OEP) it expects certain register values in order to properly execute. In some contextes, I was able to simply preserve the `RDX` register and no crashes occured, in others (using shellcode I downloaded) preserving RDX was not enough. So in order to stay portable, I thought it was wise to save all state as I wasn't completely sure which registers were needed currently or in the future.
+The `-noPreserve` flag removes the general purpose register preservation routine. For x86_32 targets this is accomplished via a `pushad` instruction. For x86_64 targets, all general purpose registers are manually pushed onto the stack as the the `pushad` instruction in x86_64 is not valid. The overall purpose of this routine is to preserve register states after execution your payload, when control is handed back to libc runtime routine (OEP) it expects certain register values in order to properly execute. In some contexts, I was able to simply preserve the `RDX` register and no crashes occured, in others (using shellcode I downloaded) preserving `RDX` was not enough. So in order to stay "portable", I thought it was wise to save all state as I wasn't completely sure which registers were needed currently or in the future.
 
 The `-noRestoration` flag removes the restoration routine, which is the opposite of the preservation routine, it performs a `popa` for x86_32 targets and a manual popping of each general purpose register from the stack.
 
-The `-noRetOEP` flag removes the "return to original entry point" routine. This stub enables portability for across pie (ET_DYN) and non-pie (ET_EXEC) elf executables. The code extracts the randomized base address after it captures the current instuction pointer value by substracting the payload length (+ 5 bytes for the relative call instruction) then adds the offset of the binaries OEP to then perform a `jmp rax` or `jmp eax` (for x86_32) instruction to start executing native/non-parasitic code. If you intend on handling this your self then your code must handle proper exiting of the binary to avoid SIGSEGV.
+The `-noRetOEP` flag removes the "return to original entry point" routine. This stub enables portability across pie (ET_DYN) and non-pie (ET_EXEC) elf executables. The code extracts the randomized base address after it captures the current instuction pointer value in accumulator register. It then substracts the payload length from the accumulator (+ 5 bytes for the relative call instruction) then adds the offset of the binaries OEP to then perform a `jmp rax` or `jmp eax` (for x86_32) instruction to start executing native/non-parasitic code. If you intend on handling this your self then your code must handle proper exiting of the binary to avoid SIGSEGV.
 
 All preservation, restoration and ret-2-oep shellcode are heavily commented for clarity. Restoration and preservation stubs can be found at the top of the `d0zer.go` source file. The `ret2OEP` routine can be found in `epilogue.go`.
+
+# References
+
+Linux Binary Analysis by Ryan Oneil (Elfmaster), see virus technology chapter.
+
+LPV (a unix virus) written in C utilizing the same algorithm as d0zer written by Elfmaster.
+https://bitlackeys.org/projects/lpv.c
+
+Unix ELF parasites and viruses - by Silvio Cesar
+https://vx-underground.org/archive/VxHeaven/lib/vsc01.html
+
+Return To Original Entry Point Despite PIE - by s0lden
+https://tmpout.sh/1/11.html

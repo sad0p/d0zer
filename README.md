@@ -8,8 +8,6 @@ My motivations are quite simple, I have a proclovity for the darkside of compute
 
 # Usage
 
-
-
 <pre>
 [sad0p@Arch-Deliberate d0zer]$ ./d0zer --help
 Usage of ./d0zer:
@@ -29,3 +27,16 @@ Usage of ./d0zer:
     	path to binary targetted for infection
 [sad0p@Arch-Deliberate d0zer]$ 
 </pre>
+
+Basic demo (benign) infection can be accomplished with `./dozer -target [path-to-target]`.
+
+<pre> 
+[sad0p@Arch-Deliberate d0zer]$ ./d0zer -target experimental/ls
+[sad0p@Arch-Deliberate d0zer]$ experimental/ls-infected
+hello -- this is a non destructive payloadd0zer	     epiloguejmp.go  jmp-to-oep32      jmp-to-oep.o		  non-destructive-payload32.asm  non-destructive-payload64.o  shellcode.c
+d0zer.go     experimental    jmp-to-oep32.asm  LICENSE			  non-destructive-payload32.o	 output			      test
+elf64	     genpayload.go   jmp-to-oep32.o    non-destructive-payload	  non-destructive-payload64	 README.md		      test.go
+epiloguejmp  jmp-to-oep      jmp-to-oep.asm    non-destructive-payload32  non-destructive-payload64.asm  shellcode
+[sad0p@Arch-Deliberate d0zer]$ 
+</pre>
+

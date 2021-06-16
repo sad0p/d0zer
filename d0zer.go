@@ -543,7 +543,7 @@ func (t *targetBin) getFileContents() error {
 
 func main() {
 
-	debug := flag.Bool("debug", false, "see debug out put (generated payload, modifications, etc)")
+	debug := flag.Bool("debug", false, "see debug output (generated payload, modifications, etc)")
 	pEnv := flag.String("payloadEnv", "", "name of the environmental variable holding the payload")
 	oFile := flag.String("target", "", "path to binary targetted for infection")
 	pFile := flag.String("payloadBin", "", "path to binary containing payload")

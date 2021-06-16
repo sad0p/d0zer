@@ -6,6 +6,14 @@ d0zer currently allows for up to a page size payload (4096 bytes). It is capable
 # Motivation
 My motivations are quite simple, I like doing interesting things with the ELF's and binary infections of a target requires a decent amount of overhead knowledge and skill prequisite to perform it (TO ME), so I set out to learn from papers, books and specs from the past (see references), throwed Golang in the middle for increased difficulty and here I am.
 
+# build
+
+<pre> 
+[sad0p@Arch-Deliberate d0zer]$ go version
+go version go1.16.3 gccgo (GCC) 11.1.0 linux/amd64
+[sad0p@Arch-Deliberate d0zer]$ go build d0zer.go epiloguejmp.go 
+</pre>
+
 # Usage
 
 <pre>

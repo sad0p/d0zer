@@ -20,7 +20,7 @@ go version go1.16.3 gccgo (GCC) 11.1.0 linux/amd64
 [sad0p@Arch-Deliberate d0zer]$ ./d0zer --help
 Usage of ./d0zer:
   -debug
-    	see debug out put (generated payload, modifications, etc)
+    	see debug output (generated payload, modifications, etc)
   -noPreserve
     	prevents d0zer from prepending its register preservation routine to your payload
   -noRestoration
@@ -127,7 +127,7 @@ All preservation, restoration and ret-2-oep shellcode are heavily commented for 
 
 # Payload considerations
 
-It's worth noting that code being injected (payload/parasite) should be position independent. Additionally with in your payload anything pushed onto the stack should be popped off if you choose to use restoration and preservations stubs (which d0zer prepends & appends by default). Due to the stacks LIFO structure, should anything (except the register values pushed in the preservation stub)be on there after you've executed your payload you run the risk of getting a SIGSEGV in the libc run time routine.
+It's worth noting that code being injected (payload/parasite) should be position independent. Additionally with in your payload anything pushed onto the stack should be popped off if you choose to use restoration and preservations stubs (which d0zer prepends & appends by default). Due to the stacks LIFO structure, should anything (except the register values pushed in the preservation stub)be on there after you've executed your payload you run the risk of getting a SIGSEGV in the libc runtime routine.
 
 # References
 <pre>

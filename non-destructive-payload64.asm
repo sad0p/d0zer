@@ -3,9 +3,6 @@
         section .text
 
 _start:
-	push rdi
-	push rsi
-	push rdx 
 	jmp message
 
 message: 
@@ -24,9 +21,6 @@ shellcode:
 	;xor rax, rax
 	;mov al, 0x3c		; syscall for exit
 	;syscall 
-	pop rdx
-	pop rsi
-	pop rdi
 
 
 

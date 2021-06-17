@@ -70,7 +70,7 @@ Supplying `-debug` allows you to see each step of the infection algorithm at wor
 --------------------END------------------------------
 [+] Generated and appended position independent return 2 OEP stub to payload
 [+] Increased text segment p_filesz and p_memsz by 144 (length of payload)
-[+] Adjusting segments after text segment file offsets by 0x%x 4096
+[+] Adjusting segments after text segment file offsets by 0x1000
 Inceasing pHeader @ index 4 by 0x1000
 Inceasing pHeader @ index 5 by 0x1000
 Inceasing pHeader @ index 6 by 0x1000

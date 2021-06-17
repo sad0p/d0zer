@@ -24,7 +24,7 @@ const (
 	PAYLOAD_LEN_POST_EPILOGUE       string = "[+] Payload size post-epilogue 0x%x\n"
 	GENERATE_AND_APPEND_PIC_STUB    string = "[+] Generated and appended position independent return 2 OEP stub to payload"
 	INCREASED_TEXT_SEG_P_FILESZ     string = "[+] Increased text segment p_filesz and p_memsz by %d (length of payload)\n"
-	ADJUST_SEGMENTS_AFTER_TEXT      string = "[+] Adjusting segments after text segment file offsets by 0x%x"
+	ADJUST_SEGMENTS_AFTER_TEXT      string = "[+] Adjusting segments after text segment file offsets by 0x%x\n"
 	INCREASE_PHEADER_AT_INDEX_BY    string = "Inceasing pHeader @ index %d by 0x%x\n"
 	INCREASE_SECTION_HEADER_ADDRESS string = "[+] Increasing section header addresses if they come after text segment"
 	UPDATE_SECTIONS_PAST_TEXT_SEG   string = "[+] (%d) Updating sections past text segment @ addr 0x%x\n"
@@ -236,7 +236,7 @@ func (t *targetBin) infectBinary(debug bool, noRestoration bool, noRetOEP bool) 
 		}
 
 		if debug {
-			fmt.Println(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
+			fmt.Printf(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 		}
 
 		for j := textNdx; j < pNum; j++ {
@@ -316,7 +316,7 @@ func (t *targetBin) infectBinary(debug bool, noRestoration bool, noRetOEP bool) 
 		}
 
 		if debug {
-			fmt.Println(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
+			fmt.Printf(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 		}
 
 		for j := textNdx; j < pNum; j++ {

@@ -176,12 +176,6 @@ func (t *targetBin) isElf() bool {
 	return !(t.Ident[0] != '\x7f' || t.Ident[1] != 'E' || t.Ident[2] != 'L' || t.Ident[3] != 'F')
 }
 
-func checkError(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
 func (t *targetBin) infectBinary(debug bool, noRestoration bool, noRetOEP bool) error {
 	var textSegEnd interface{}
 	var oShoff interface{}

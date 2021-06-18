@@ -4,7 +4,7 @@ Elf binary infector written in Golang. It can be used for infecting executables 
 d0zer currently allows for up to a page size payload (4096 bytes). It is capable of infecting both x86_32 and x86_64  elf executable binaries executables.
 
 # Motivation
-My motivations are quite simple, I like doing interesting things with the ELF's and binary infections of a target requires a decent amount of overhead knowledge and skill prequisite to perform it (TO ME), so I set out to learn from papers, books and specs from the past (see references), throwed Golang in the middle for increased difficulty and here I am.
+My motivations are quite simple, I like doing interesting things with the ELFs and binary infection of a target requires a decent amount of overhead knowledge and skill as a prerequisite to perform it (TO ME), so I set out to learn from papers, books and specs from the past (see references), throwed Golang in the middle for increased difficulty and here I am.
 
 # build
 

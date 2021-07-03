@@ -78,20 +78,19 @@ Inceasing pHeader @ index 8 by 0x1000
 Inceasing pHeader @ index 10 by 0x1000
 [+] Increasing section header addresses if they come after text segment
 [+] Extending section header entry for text section by payload len.
-[+] (15) Updating sections past text segment @ addr 0x18000
-[+] (16) Updating sections past text segment @ addr 0x1d324
-[+] (17) Updating sections past text segment @ addr 0x1dc78
-[+] (18) Updating sections past text segment @ addr 0x21fd0
-[+] (19) Updating sections past text segment @ addr 0x21fd8
-[+] (20) Updating sections past text segment @ addr 0x21fe0
-[+] (21) Updating sections past text segment @ addr 0x22a58
-[+] (22) Updating sections past text segment @ addr 0x22c58
-[+] (23) Updating sections past text segment @ addr 0x23000
-[+] (24) Updating sections past text segment @ addr 0x23280
-[+] (25) Updating sections past text segment @ addr 0x0
-[+] (26) Updating sections past text segment @ addr 0x0
+[+] (15) Updating sections past text section @ addr 0x18000
+[+] (16) Updating sections past text section @ addr 0x1d324
+[+] (17) Updating sections past text section @ addr 0x1dc78
+[+] (18) Updating sections past text section @ addr 0x21fd0
+[+] (19) Updating sections past text section @ addr 0x21fd8
+[+] (20) Updating sections past text section @ addr 0x21fe0
+[+] (21) Updating sections past text section @ addr 0x22a58
+[+] (22) Updating sections past text section @ addr 0x22c58
+[+] (23) Updating sections past text section @ addr 0x23000
+[+] (24) Updating sections past text section @ addr 0x23280
+[+] (25) Updating sections past text section @ addr 0x0
+[+] (26) Updating sections past text section @ addr 0x0
 [+] writing payload into the binary
-[sad0p@Arch-Deliberate d0zer]$ 
 </pre>
 
 A custom payload can be injected into the binary with the `-payloadEnv` flag. Below I inject a basic execve /bin/sh shellcode into the ls command as an example.

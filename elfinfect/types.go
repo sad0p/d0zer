@@ -24,3 +24,8 @@ type TargetBin struct {
 	Fh      *os.File
 	Payload bytes.Buffer
 }
+
+type DefaultPayload struct {
+	payload32 bytes.Buffer
+	payload64 bytes.Buffer
+}

@@ -103,10 +103,11 @@ func main() {
 		return
 
 	case pEnv == "" && pFile == "":
+		var payload elfinfect.DefaultPayload
 		if t.EIdent.Arch == elf.ELFCLASS64 {
-			t.Payload.Write(elfinfect.DefaultPayload64)
+			t.Payload.Write(payload.Intel64())
 		} else {
-			t.Payload.Write(elfinfect.DefaultPayload32)
+			t.Payload.Write(payload.Intel32())
 		}
 
 	case pEnv != "":

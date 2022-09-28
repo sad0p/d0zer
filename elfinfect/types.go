@@ -7,6 +7,12 @@ import (
 	"os"
 )
 
+type impSegments struct {
+	noteNdx int
+	textNdx int
+	dynNdx int 
+}
+
 type enumIdent struct {
 	Endianness binary.ByteOrder
 	Arch       elf.Class
@@ -23,6 +29,7 @@ type TargetBin struct {
 	Phdrs   interface{}
 	Fh      *os.File
 	Payload bytes.Buffer
+	impNdx impSegments
 }
 
 type DefaultPayload struct {

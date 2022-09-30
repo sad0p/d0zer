@@ -5,6 +5,7 @@ import (
 	"debug/elf"
 	"encoding/binary"
 	"errors"
+	"reflect"
 )
 
 func (t *TargetBin) IsElf() bool {
@@ -58,7 +59,7 @@ func (t *TargetBin) MapHeader() error {
 func (t *TargetBin) GetSectionHeaders() error {
 	if h, ok := t.Hdr.(*elf.Header64); ok {
 		start := int(h.Shoff)
-		end := int(h.Shentsize)*int(h.Shnum) + int(h.Shoff)
+		end := int(h.Shentsize) * int(h.Shnum) + int(h.Shoff)
 		sr := bytes.NewBuffer(t.Contents[start:end])
 		t.Shdrs = make([]elf.Section64, h.Shnum)
 
@@ -84,7 +85,7 @@ func (t *TargetBin) GetSectionHeaders() error {
 func (t *TargetBin) GetProgramHeaders() error {
 	if h, ok := t.Hdr.(*elf.Header64); ok {
 		start := h.Phoff
-		end := int(h.Phentsize)*int(h.Phnum) + int(h.Phoff)
+		end := int(h.Phentsize) * int(h.Phnum) + int(h.Phoff)
 		pr := bytes.NewBuffer(t.Contents[start:end])
 		t.Phdrs = make([]elf.Prog64, h.Phnum)
 
@@ -134,11 +135,68 @@ func (t *TargetBin) GetProgramHeaders() error {
 
 	return nil
 }
-/*
-func (t *TargetBin) GetRelaDyn() error {
- 
+
+func (t *TargetBin) GetDyn() error {
+	dynNdx := t.impNdx.dynNdx
+	if dynNdx == 0 {
+		return errors.New("Error: No Dynamic Segment found")
+	}
+
+	if pHeaders, ok := t.Phdrs.([]elf.Prog64); ok {
+		start := pHeaders[dynNdx].Off
+		end := start + pHeaders[dynNdx].Filesz
+		
+		var dynEntries []elf.Dyn64
+		var currentDynEntry elf.Dyn64
+		
+		dynSize := uint64(reflect.TypeOf(currentDynEntry).Size())
+
+		s := start
+		for s < end {
+			dr := bytes.NewBuffer(t.Contents[s : s + dynSize])
+			if err := binary.Read(dr, t.EIdent.Endianness, &currentDynEntry); err != nil {
+				return err
+			}
+			dynEntries = append(dynEntries, currentDynEntry)
+			
+			if elf.DynTag(currentDynEntry.Tag) == elf.DT_NULL {
+				break
+			}
+			s += dynSize
+		}
+	
+		t.Dyn = dynEntries
+	}
+
+	if pHeaders, ok := t.Phdrs.([]elf.Prog32); ok {
+		start := pHeaders[dynNdx].Off
+		end := start + pHeaders[dynNdx].Filesz
+		
+		var dynEntries []elf.Dyn32
+		var currentDynEntry elf.Dyn32
+		
+		dynSize := uint32(reflect.TypeOf(currentDynEntry).Size())
+
+		s := start
+		for s < end {
+			dr := bytes.NewBuffer(t.Contents[s : s + dynSize])
+			if err := binary.Read(dr, t.EIdent.Endianness, &currentDynEntry); err != nil {
+				return err
+			}
+			dynEntries = append(dynEntries, currentDynEntry)
+			
+			if elf.DynTag(currentDynEntry.Tag) == elf.DT_NULL {
+				break
+			}
+			s += dynSize 
+		}
+
+		t.Dyn = dynEntries
+	}
+	
+	return nil
 }
-*/
+
 func (t *TargetBin) GetFileContents() error {
 	fStat, err := t.Fh.Stat()
 	if err != nil {

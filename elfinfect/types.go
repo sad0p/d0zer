@@ -27,6 +27,7 @@ type TargetBin struct {
 	Hdr     interface{}
 	Shdrs   interface{}
 	Phdrs   interface{}
+	Dyn     interface{}
 	Fh      *os.File
 	Payload bytes.Buffer
 	impNdx impSegments

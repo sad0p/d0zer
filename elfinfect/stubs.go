@@ -6,7 +6,8 @@ import (
 	"encoding/binary"
 )
 
-var preserve64 = []byte{
+var preserve64 = []byte{	
+	0x54,       //push   %rsp
 	0x50,       //push   %rax
 	0x51,       //push   %rcx
 	0x53,       //push   %rbx
@@ -14,7 +15,6 @@ var preserve64 = []byte{
 	0x56,       //push   %rsi
 	0x57,       //push   %rdi
 	0x55,       //push   %rbp
-	0x54,       //push   %rsp
 	0x41, 0x50, //push   %r8
 	0x41, 0x51, //push   %r9
 	0x41, 0x52, //push   %r10
@@ -34,14 +34,14 @@ var restoration64 = []byte{
 	0x41, 0x5a, //pop    %r10
 	0x41, 0x59, //pop    %r9
 	0x41, 0x58, //pop    %r8
-	0x5c, //pop    %rsp
 	0x5d, //pop    %rbp
 	0x5f, //pop    %rdi
 	0x5e, //pop    %rsi
 	0x5a, //pop    %rdx
 	0x5b, //pop    %rbx
 	0x59, //pop    %rcx
-	0x58, //pop    %rax
+	0x58, //pop    %rax	
+	0x5c, //pop    %rsp
 }
 
 var preserve32 = []byte{0x60} //pusha

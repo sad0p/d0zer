@@ -145,6 +145,11 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	
+	if err := t.GetSectionNames(); err != nil {
+		fmt.Println(err)
+		return 
+	}
 
 	if err := t.GetProgramHeaders(); err != nil {
 		fmt.Println(err)

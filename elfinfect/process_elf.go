@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"reflect"
+//	"fmt"
 )
 
 func (t *TargetBin) IsElf() bool {
@@ -82,6 +83,44 @@ func (t *TargetBin) GetSectionHeaders() error {
 	return nil
 }
 
+func (t *TargetBin) GetSectionNames() error {
+	if t.Shdrs == nil {
+		return errors.New("Programming error: GetSectionHeaders() must be called before GetSectionNames()")
+	}
+		
+	if h, ok := t.Hdr.(*elf.Header64); ok {
+		start := t.Shdrs.([]elf.Section64)[h.Shstrndx].Off
+		end := t.Shdrs.([]elf.Section64)[h.Shstrndx].Off + t.Shdrs.([]elf.Section64)[h.Shstrndx].Size
+		shstrTabReader := bytes.NewBuffer(t.Contents[start:end])		
+		shstrTab := make([]byte, t.Shdrs.([]elf.Section64)[h.Shstrndx].Size)
+
+		if err := binary.Read(shstrTabReader, t.EIdent.Endianness, shstrTab); err != nil {
+			return err
+		}
+		
+		t.SectionNames = make([]string, h.Shnum)
+
+		for i, v := range t.Shdrs.([]elf.Section64) {
+			t.SectionNames[i] = parseSectionHeaderStringTable(v.Name, shstrTab) 
+		}
+				
+		
+	}
+
+	return nil 
+}
+
+func parseSectionHeaderStringTable(sIndex uint32, shstrTab []byte) string {
+	end := sIndex
+	for end < uint32(len(shstrTab)) {
+		if shstrTab[end] == 0x0 {
+			break
+		}
+		end++
+	}
+	return string(shstrTab[sIndex:end])
+}
+
 func (t *TargetBin) GetProgramHeaders() error {
 	if h, ok := t.Hdr.(*elf.Header64); ok {
 		start := h.Phoff
@@ -104,6 +143,9 @@ func (t *TargetBin) GetProgramHeaders() error {
 
 			case elf.ProgType(pHeaders[i].Type) == elf.PT_DYNAMIC:
 				t.impNdx.dynNdx = i
+
+			case elf.ProgType(pHeaders[i].Type) == elf.PT_TLS:
+				t.hasTLS = true 
 			}
 		}
 	}
@@ -212,22 +254,22 @@ func (t *TargetBin) GetFileContents() error {
 	return nil
 }
 
-func getBaseAddrOfVaddr(vaddr interface{}, phdrs interface{}, offset interface{}) error {
+func getFileOffset(addr interface{}, phdrs interface{}, offset interface{}) error {
 	if pHeaders, ok := phdrs.([]elf.Prog64); ok {
 		for _, p := range pHeaders {
-			endVaddr := p.Vaddr + p.Memsz 	
-			if vaddr.(uint64) >= p.Vaddr && vaddr.(uint64) <= endVaddr {
-				*offset.(*uint64) = vaddr.(uint64) - p.Vaddr 
+			endAddr := p.Vaddr + p.Memsz
+			if addr.(uint64) >= p.Vaddr && addr.(uint64) <= endAddr {
+				*offset.(*uint64) = addr.(uint64) - p.Vaddr + p.Off
 				return nil
 			}
 		}
 	}
-	
+
 	if pHeaders, ok := phdrs.([]elf.Prog32); ok {
 		for _, p := range pHeaders {
-			endVaddr := p.Vaddr + p.Memsz 	
-			if vaddr.(uint32) >= p.Vaddr && vaddr.(uint32) <= endVaddr {
-				*offset.(*uint32) = vaddr.(uint32) - p.Vaddr
+			endAddr := p.Vaddr + p.Memsz 	
+			if addr.(uint32) >= p.Vaddr && addr.(uint32) <= endAddr {
+				*offset.(*uint32) = addr.(uint32) - p.Vaddr
 				return nil
 			}
 		}

@@ -48,40 +48,39 @@ func (t *TargetBin) relativeRelocHook(origAddend *int64, relocEntry *elf.Rela64,
 	if dtRelaEntryCount == 0 || dtRelaOffset == 0 {
 		return errors.New("Error while acquiring DT_RELA or DT_RELAENT")
 	}
-			
+				
 	var o uint64
-	if elf.Type(t.Hdr.(*elf.Header64).Type) == elf.ET_EXEC {
-			if err := getBaseAddrOfVaddr(dtRelaOffset, t.Phdrs.([]elf.Prog64), &o); err != nil {
-				return err
-			}
-	}else {
-		o = dtRelaOffset
-	}
-			
+	
+	o = dtRelaOffset
 	if debug{
 		fmt.Printf("[+] File offset of relocations @ 0x%016x\n", o)
 	}
-			
-	origRelocStart := o
-			
-	s := uint64(reflect.TypeOf(*relocEntry).Size())		
-	endReloc := o + dtRelaEntryCount * uint64(s)
-	for o < endReloc {
+		
+	relaEntrySize := uint64(reflect.TypeOf(*relocEntry).Size())		
+	endReloc := o + dtRelaEntryCount * uint64(relaEntrySize)
+
+	for s := relaEntrySize; o < endReloc; o += s {
 		relReader := bytes.NewBuffer(t.Contents[o : o + s])
 		if err := binary.Read(relReader, t.EIdent.Endianness, relocEntry); err != nil {
 			return err
 		}
 				
 		if elf.R_X86_64(relocEntry.Info) == elf.R_X86_64_RELATIVE {
-			if debug {
-				fmt.Println("[+] Found first relative reloc")
-				fmt.Printf("\toffset: 0x%016x\n", relocEntry.Off) 
-				fmt.Printf("\ttype: %s\n", elf.R_X86_64(relocEntry.Info).String())
-				fmt.Printf("\tAddend: 0x%016x\n", relocEntry.Addend)
+			if t.hasTLS {
+				if t.withInSectionVirtualAddrSpace(".init_array", relocEntry.Off) {
+					break;	
+				}
+				continue
 			}
 			break
 		}
-		o += s
+	}
+
+	if debug {
+		fmt.Println("[+] Found viable relocation record hooking/poisoning")
+		fmt.Printf("\toffset: 0x%016x\n", relocEntry.Off) 
+		fmt.Printf("\ttype: %s\n", elf.R_X86_64(relocEntry.Info).String())
+		fmt.Printf("\tAddend: 0x%016x\n", relocEntry.Addend)
 	}
 
 	if elf.R_X86_64(relocEntry.Info) != elf.R_X86_64_RELATIVE {
@@ -96,7 +95,37 @@ func (t *TargetBin) relativeRelocHook(origAddend *int64, relocEntry *elf.Rela64,
 		return err
 	}
 	
-	copy(t.Contents[origRelocStart:], relWriter.Bytes())
+	copy(t.Contents[o:], relWriter.Bytes())
+
+	var fileOff uint64
+	if err := getFileOffset(relocEntry.Off, pHeaders, &fileOff); err != nil {
+		fmt.Println(err)
+
+	}
+	
+	binary.LittleEndian.PutUint64(t.Contents[fileOff:], uint64(relocEntry.Addend))
+
+	if debug {
+		fmt.Printf("[+] offset 0x%016x updated with value (Addend) %016x\n", fileOff, relocEntry.Addend)
+	}
 	
 	return nil
+}
+
+func (t *TargetBin) withInSectionVirtualAddrSpace(sectionName string, addr interface{}) bool {
+	var s int
+	for s = 0; s < len(t.SectionNames); s++ {
+		if sectionName == t.SectionNames[s] {
+			break
+		}
+	}
+	
+	var status bool
+	if shdrs, ok := t.Shdrs.([]elf.Section64); ok {
+		startAddr := shdrs[s].Addr
+		endAddr := shdrs[s].Addr + shdrs[s].Size 
+		status =  addr.(uint64) >= startAddr && addr.(uint64) <= endAddr 
+	}
+
+	return status
 }

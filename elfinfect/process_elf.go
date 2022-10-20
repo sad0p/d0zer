@@ -269,7 +269,7 @@ func getFileOffset(addr interface{}, phdrs interface{}, offset interface{}) erro
 		for _, p := range pHeaders {
 			endAddr := p.Vaddr + p.Memsz 	
 			if addr.(uint32) >= p.Vaddr && addr.(uint32) <= endAddr {
-				*offset.(*uint32) = addr.(uint32) - p.Vaddr
+				*offset.(*uint32) = addr.(uint32) - p.Vaddr + p.Off
 				return nil
 			}
 		}

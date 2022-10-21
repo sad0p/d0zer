@@ -9,7 +9,6 @@ import(
 	"fmt"
 )
 
-//func (t *TargetBin) relativeRelocHook(origAddend *int64, relocEntry *elf.Rela64, debug bool) error {			
 func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interface{}, debug bool) error {			
 	textNdx := t.impNdx.textNdx
 	if debug {

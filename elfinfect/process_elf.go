@@ -107,6 +107,25 @@ func (t *TargetBin) GetSectionNames() error {
 		
 	}
 
+	if h, ok := t.Hdr.(*elf.Header32); ok {
+		start := t.Shdrs.([]elf.Section32)[h.Shstrndx].Off
+		end := t.Shdrs.([]elf.Section32)[h.Shstrndx].Off + t.Shdrs.([]elf.Section32)[h.Shstrndx].Size
+		shstrTabReader := bytes.NewBuffer(t.Contents[start:end])		
+		shstrTab := make([]byte, t.Shdrs.([]elf.Section32)[h.Shstrndx].Size)
+
+		if err := binary.Read(shstrTabReader, t.EIdent.Endianness, shstrTab); err != nil {
+			return err
+		}
+		
+		t.SectionNames = make([]string, h.Shnum)
+
+		for i, v := range t.Shdrs.([]elf.Section32) {
+			t.SectionNames[i] = parseSectionHeaderStringTable(v.Name, shstrTab) 
+		}
+				
+		
+	}
+
 	return nil 
 }
 
@@ -165,12 +184,15 @@ func (t *TargetBin) GetProgramHeaders() error {
 			switch {
 			case elf.ProgType(pHeaders[i].Type) == elf.PT_LOAD && (elf.ProgFlag(pHeaders[i].Flags) == (elf.PF_X | elf.PF_R)):
 				t.impNdx.textNdx = i
-			
+
 			case elf.ProgType(pHeaders[i].Type) == elf.PT_NOTE:
 				t.impNdx.noteNdx = i
 
 			case elf.ProgType(pHeaders[i].Type) == elf.PT_DYNAMIC:
 				t.impNdx.dynNdx = i
+
+			case elf.ProgType(pHeaders[i].Type) == elf.PT_TLS:
+				t.hasTLS = true
 			}
 		}
 	}

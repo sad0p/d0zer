@@ -6,11 +6,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/d0zer/elfinfect"
 	"io"
 	"log"
 	"os"
 	"strings"
-	"github.com/d0zer/elfinfect"
 )
 
 func getPayloadFromEnv(p io.Writer, key string) (int, error) {
@@ -93,7 +93,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	
+
 	var opts elfinfect.InfectOpts
 
 	switch {
@@ -145,17 +145,17 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	
+
 	if err := t.GetSectionNames(); err != nil {
 		fmt.Println(err)
-		return 
+		return
 	}
 
 	if err := t.GetProgramHeaders(); err != nil {
 		fmt.Println(err)
 		return
 	}
-	
+
 	switch {
 	case infectionAlgo == "TextSegmentPadding":
 		if err := t.TextSegmentPaddingInfection(opts); err != nil {

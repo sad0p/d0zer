@@ -33,6 +33,7 @@ type TargetBin struct {
 	Payload bytes.Buffer
 	impNdx impSegments
 	hasTLS bool 
+	Debug bool 	
 }
 
 type DefaultPayload struct {

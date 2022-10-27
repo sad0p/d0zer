@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"strings"
-
 	"github.com/d0zer/elfinfect"
 )
 
@@ -70,6 +69,7 @@ func main() {
 		log.Fatal("No target binary supplied")
 	}
 	t := new(elfinfect.TargetBin)
+	t.Debug = debug
 
 	fh, err := os.Open(oFile)
 	if err != nil {
@@ -158,13 +158,13 @@ func main() {
 	
 	switch {
 	case infectionAlgo == "TextSegmentPadding":
-		if err := t.TextSegmentPaddingInfection(opts, debug); err != nil {
+		if err := t.TextSegmentPaddingInfection(opts); err != nil {
 			fmt.Println(err)
 			return
 		}
 
 	case infectionAlgo == "PtNoteToPtLoad":
-		if err := t.PtNoteToPtLoadInfection(opts, debug); err != nil {
+		if err := t.PtNoteToPtLoadInfection(opts); err != nil {
 			fmt.Println(err)
 			return
 		}

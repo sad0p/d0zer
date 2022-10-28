@@ -9,14 +9,6 @@ import (
 	"reflect"
 )
 
-/*
-const (
-
-	DYNSEGMENT_ENTRIES    string = "[+] %d entries in Dynamic Segment\n"
-	FOUND_VIABLE_RELOC    string = "[+] Found viable relocation record hooking/poisoning"
-
-)
-*/
 func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interface{}, newAddend interface{}) error {
 	const (
 		DYNSEGMENT_ENTRIES string = "[+] %d entries in Dynamic Segment\n"

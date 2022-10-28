@@ -24,6 +24,7 @@ func getPayloadFromEnv(p io.Writer, key string) (int, error) {
 		errorString := "Environmental variable " + key + " contains no payload"
 		return 0, errors.New(errorString)
 	}
+	
 	val = strings.ReplaceAll(val, "\\x", "")
 	decoded, err := hex.DecodeString(val)
 	if err != nil {

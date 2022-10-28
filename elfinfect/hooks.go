@@ -9,7 +9,20 @@ import (
 	"reflect"
 )
 
+/*
+const (
+
+	DYNSEGMENT_ENTRIES    string = "[+] %d entries in Dynamic Segment\n"
+	FOUND_VIABLE_RELOC    string = "[+] Found viable relocation record hooking/poisoning"
+
+)
+*/
 func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interface{}, newAddend interface{}) error {
+	const (
+		DYNSEGMENT_ENTRIES string = "[+] %d entries in Dynamic Segment\n"
+		FOUND_VIABLE_RELOC string = "[+] Found viable relocation record hooking/poisoning"
+	)
+
 	t.printDebugMsg("[+] CtorsHijack requested. Locating and reading Dynamic Segment")
 
 	if err := t.GetDyn(); err != nil {
@@ -19,7 +32,7 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 	if _, ok := relocEntry.(*elf.Rela64); ok {
 		pHeaders := t.Phdrs.([]elf.Prog64)
 
-		t.printDebugMsg("[+] %d entries in Dynamic Segment\n", len(t.Dyn.([]elf.Dyn64)))
+		t.printDebugMsg(DYNSEGMENT_ENTRIES, len(t.Dyn.([]elf.Dyn64)))
 
 		var dtRelaOffset uint64
 		var dtRelaEntryCount uint64
@@ -66,7 +79,7 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 			}
 		}
 
-		t.printDebugMsg("[+] Found viable relocation record hooking/poisoning")
+		t.printDebugMsg(FOUND_VIABLE_RELOC)
 		t.printDebugMsg("\toffset: 0x%016x\n", relocEntry.(*elf.Rela64).Off)
 		t.printDebugMsg("\ttype: %s\n", elf.R_X86_64(relocEntry.(*elf.Rela64).Info).String())
 		t.printDebugMsg("\tAddend: 0x%016x\n", relocEntry.(*elf.Rela64).Addend)
@@ -99,7 +112,7 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 	if _, ok := relocEntry.(*elf.Rel32); ok {
 		pHeaders := t.Phdrs.([]elf.Prog32)
 
-		t.printDebugMsg("[+] %d entries in Dynamic Segment\n", len(t.Dyn.([]elf.Dyn32)))
+		t.printDebugMsg(DYNSEGMENT_ENTRIES, len(t.Dyn.([]elf.Dyn32)))
 
 		var dtRelOffset uint32
 		var dtRelEntryCount uint32
@@ -146,7 +159,7 @@ func (t *TargetBin) relativeRelocHook(origAddend interface{}, relocEntry interfa
 			}
 		}
 
-		t.printDebugMsg("[+] Found viable relocation record hooking/poisoning")
+		t.printDebugMsg(FOUND_VIABLE_RELOC)
 		t.printDebugMsg("\toffset: 0x%016x\n", relocEntry.(*elf.Rel32).Off)
 		t.printDebugMsg("\ttype: %s\n", elf.R_386(relocEntry.(*elf.Rel32).Info).String())
 

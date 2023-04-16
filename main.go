@@ -24,7 +24,7 @@ func getPayloadFromEnv(p io.Writer, key string) (int, error) {
 		errorString := "Environmental variable " + key + " contains no payload"
 		return 0, errors.New(errorString)
 	}
-	
+
 	val = strings.ReplaceAll(val, "\\x", "")
 	decoded, err := hex.DecodeString(val)
 	if err != nil {
@@ -44,7 +44,7 @@ func main() {
 	flag.BoolVar(&listAlgos, "listAlgos", false, "list available infection algorithms")
 	flag.BoolVar(&ctorsHijack, "ctorsHijack", false, "Hijack the first constructor in the target to start parasitic execution intead of modifying the OEP")
 	flag.StringVar(&pEnv, "payloadEnv", "", "name of the environmental variable holding the payload")
-	flag.StringVar(&oFile, "target", "", "path to binary targetted for infection")
+	flag.StringVar(&oFile, "target", "", "path to binary targeted for infection")
 	flag.StringVar(&pFile, "payloadBin", "", "path to binary containing payload")
 	flag.BoolVar(&noPres, "noPreserve", false, "prevents d0zer from prepending its register preservation routine to your payload")
 	flag.BoolVar(&noRest, "noRestoration", false, "prevents d0zer from appending register restoration routine to your payload")
@@ -159,6 +159,30 @@ func main() {
 
 	switch {
 	case infectionAlgo == "TextSegmentPadding":
+		pLen := t.Payload.Len() + 5
+		switch t.EIdent.Arch {
+
+		case elf.ELFCLASS64:
+			var availableBytes uint64
+			t.TextSegAvailableBytes(&availableBytes)
+			if availableBytes < uint64(pLen) {
+				fmt.Printf("[-] Warning: Maximum space available in binary (0x%x) is less than payload size (0x%x [includes 5 bytes for relative call])\n", availableBytes, pLen)
+			}
+			if debug {
+				fmt.Printf("[+] Maximum payload size 0x%x for %s\n", availableBytes, oFile)
+			}
+
+		case elf.ELFCLASS32:
+			var availableBytes uint32
+			t.TextSegAvailableBytes(&availableBytes)
+			if availableBytes < uint32(pLen) {
+				fmt.Printf("[-] Warning: Maximum space available in binary (0x%x) is less than payload size (0x%x [includes 5 bytes for relative call])\n", availableBytes, pLen)
+			}
+			if debug {
+				fmt.Printf("[+] Maximum payload size 0x%x for %s\n", availableBytes, oFile)
+			}
+		}
+
 		if err := t.TextSegmentPaddingInfection(opts); err != nil {
 			fmt.Println(err)
 			return

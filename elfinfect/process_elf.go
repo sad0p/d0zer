@@ -198,6 +198,16 @@ func (t *TargetBin) GetProgramHeaders() error {
 	return nil
 }
 
+func (t *TargetBin) TextSegAvailableBytes(availableBytes interface{}) {
+	textNdx := t.impNdx.textNdx
+	nextSeg := textNdx + 1
+
+	if ab, ok := availableBytes.(*uint64); ok {
+		pHeaders := t.Phdrs.([]elf.Prog64)
+		*ab = (pHeaders[nextSeg].Vaddr & ^uint64(0x1000)) - (pHeaders[textNdx].Vaddr + pHeaders[textNdx].Memsz)
+	}
+}
+
 func (t *TargetBin) GetDyn() error {
 	dynNdx := t.impNdx.dynNdx
 	if dynNdx == 0 {

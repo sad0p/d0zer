@@ -15,12 +15,18 @@ go version go1.16.3 gccgo (GCC) 11.1.0 linux/amd64
 </pre>
 
 # Usage
-
 <pre>
-[sad0p@Arch-Deliberate d0zer]$ ./d0zer --help
-Usage of ./d0zer:
+[sad0p@arch-deliberate d0zer]$ ./d0zer -help
+  -ctorsHijack
+    	Hijack the first constructor in the target to start parasitic execution intead of modifying the OEP
   -debug
     	see debug output (generated payload, modifications, etc)
+  -help
+    	see this help menu
+  -infectionAlgo string
+    	specify infection algorithm to use (default "TextSegmentPadding")
+  -listAlgos
+    	list available infection algorithms
   -noPreserve
     	prevents d0zer from prepending its register preservation routine to your payload
   -noRestoration
@@ -32,12 +38,10 @@ Usage of ./d0zer:
   -payloadEnv string
     	name of the environmental variable holding the payload
   -target string
-    	path to binary targetted for infection
-[sad0p@Arch-Deliberate d0zer]$ 
+    	path to binary targeted for infection
+[sad0p@arch-deliberate d0zer]$ 
 </pre>
-
 Basic demo (benign) infection can be accomplished with `./dozer -target [path-to-target]`.
-
 <pre> 
 [sad0p@Arch-Deliberate d0zer]$ ./d0zer -target experimental/ls
 [sad0p@Arch-Deliberate d0zer]$ experimental/ls-infected
@@ -111,6 +115,75 @@ Getting payload from an ELF binary .text segment is not yet supported
 [sad0p@Arch-Deliberate d0zer]$ 
 </pre>
 
+A list of supported infection algorithms can be seen with `--listAlgos`.
+
+<pre>
+[sad0p@arch-deliberate d0zer]$ ./d0zer --listAlgos
+TextSegmentPadding
+	Extends the text segment and append your payload. There are max payload size considerations. Also more "stealthy" than ptnote2ptload.
+PtNoteToPtLoad
+	Converts the PT_NOTE segment to PT_LOAD. Payloads can be of arbitrary length, more stable than textsegmentpadding but easier to detect
+[sad0p@arch-deliberate d0zer]$ 
+</pre>
+
+Infection algorithm `TextSegmentPadding` is the default algorithm of choice, however it is limited based on the size of the payload and the target. For arbitrary sized payloads, `PtNoteToPtLoad` is a better choice (however it is not as covert).
+
+For entry point obfuscation, we can use `-ctorsHijack` option, this modifies relocations associated with `.init_array` section. The 
+`.init_array` section is essentially an array of function pointers that are called during runtime to be executed before `main()` or when dynamic linking of a shared object is performed, that is we can infect shared objects and have code execution performed with the `-ctorsHijack` option, code execution will take place in the context of the binary linking the shared object.
+
+The following is an example of using 
+<pre>
+[sad0p@arch-deliberate testlib2]$ cat compile-lib.sh 
+#!/bin/bash
+
+gcc -c -Wall -Werror -fpic foo.c;
+gcc -shared -o libfoo.so foo.o;
+gcc -L $PWD -Wall -o test main.c -lfoo;
+export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH;
+/bin/bash;
+[sad0p@arch-deliberate testlib2]$ cat foo.c
+#include <stdio.h>
+ 
+ 
+void foo(void)
+{
+    puts("Hello, I am a shared library");
+}
+[sad0p@arch-deliberate testlib2]$ cat foo.h
+#ifndef foo_h__
+#define foo_h__
+ 
+extern void foo(void);
+ 
+#endif  // foo_h__
+[sad0p@arch-deliberate testlib2]$ cat main.c
+#include <stdio.h>
+#include "foo.h"
+ 
+int main(void)
+{
+    puts("This is a shared library test...");
+    foo();
+    return 0;
+}
+[sad0p@arch-deliberate testlib2]$ cat foo.h
+#ifndef foo_h__
+#define foo_h__
+ 
+extern void foo(void);
+ 
+#endif  // foo_h__
+[sad0p@arch-deliberate testlib2]$ cat foo.c
+#include <stdio.h>
+ 
+ 
+void foo(void)
+{
+    puts("Hello, I am a shared library");
+}
+[sad0p@arch-deliberate testlib2]$ 
+
+</pre>  
 # Advance Usage
 
 In the event you don't like the routines d0zer add to your code the following flags can be utilized, however your payload

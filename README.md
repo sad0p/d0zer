@@ -257,7 +257,7 @@ compile-lib.sh  foo.c  foo.h  foo.o  libfoo.so  libfoo.so-clean-backup  libfoo.s
 
 # VX-Underground Black Mass Volume 2
 
-Shared object infection through relocation hijacking / poisoning is well documented in Black Mass Volume 2 [here.] (https://samples.vx-underground.org/root/Papers/Other/VXUG%20Zines/2023-09-19%20-%20Black%20Mass%20Volume%20II.pdf)
+Shared object infection through relocation hijacking / poisoning is well documented in Black Mass Volume 2 [here.](https://samples.vx-underground.org/root/Papers/Other/VXUG%20Zines/2023-09-19%20-%20Black%20Mass%20Volume%20II.pdf)
 
 # Advance Usage
 

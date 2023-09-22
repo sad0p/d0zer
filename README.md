@@ -131,7 +131,7 @@ Infection algorithm `TextSegmentPadding` is the default algorithm of choice, how
 For entry point obfuscation, we can use `-ctorsHijack` option, this modifies relocations associated with `.init_array` section. The 
 `.init_array` section is essentially an array of function pointers that are called during runtime to be executed before `main()` or when dynamic linking of a shared object is performed, that is we can infect shared objects and have code execution performed with the `-ctorsHijack` option, code execution will take place in the context of the binary linking the shared object.
 
-The following is an example of using 
+The following is an example of using -ctorsHijack (relative relocation poisoning/hijacking) to infect a shared library using TextSegmentPadding. 
 <pre>
 [sad0p@arch-deliberate testlib2]$ cat compile-lib.sh 
 #!/bin/bash

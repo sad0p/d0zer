@@ -63,9 +63,9 @@ func (t *TargetBin) PtNoteToPtLoadInfection(opts InfectOpts) error {
 		if !((opts & NoRetOEP) == NoRetOEP) {
 			var retStub []byte
 			if (opts & CtorsHijack) == CtorsHijack {
-				retStub = modEpilogue(int32(t.Payload.Len()+5), uint64(relocEntry.Addend), uint64(origAddend))
+				retStub = modEpilogue(int32(t.Payload.Len()), uint64(relocEntry.Addend), uint64(origAddend))
 			} else {
-				retStub = modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header64).Entry, oEntry)
+				retStub = modEpilogue(int32(t.Payload.Len()), t.Hdr.(*elf.Header64).Entry, oEntry)
 			}
 			t.Payload.Write(retStub)
 		}
@@ -132,9 +132,9 @@ func (t *TargetBin) PtNoteToPtLoadInfection(opts InfectOpts) error {
 		if !((opts & NoRetOEP) == NoRetOEP) {
 			var retStub []byte
 			if (opts & CtorsHijack) == CtorsHijack {
-				retStub = modEpilogue(int32(t.Payload.Len()+5), newEntry, origAddend)
+				retStub = modEpilogue(int32(t.Payload.Len()), newEntry, origAddend)
 			} else {
-				retStub = modEpilogue(int32(t.Payload.Len()+5), t.Hdr.(*elf.Header32).Entry, oEntry)
+				retStub = modEpilogue(int32(t.Payload.Len()), t.Hdr.(*elf.Header32).Entry, oEntry)
 			}
 			t.Payload.Write(retStub)
 			t.printDebugMsg(GENERATED_AND_APPEND_PIC_STUB)

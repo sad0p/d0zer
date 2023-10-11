@@ -9,9 +9,9 @@ My motivations are quite simple, I like doing interesting things with the ELFs a
 # build
 
 <pre> 
-[sad0p@Arch-Deliberate d0zer]$ go version
-go version go1.16.3 gccgo (GCC) 11.1.0 linux/amd64
-[sad0p@Arch-Deliberate d0zer]$ go build d0zer.go epiloguejmp.go 
+[sad0p@arch-deliberate d0zer]$ go version
+go version go1.21.2 linux/amd64
+[sad0p@arch-deliberate d0zer]$ go build
 </pre>
 
 # Usage

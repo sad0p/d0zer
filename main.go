@@ -35,7 +35,7 @@ func getPayloadFromEnv(p io.Writer, key string) (int, error) {
 }
 
 func main() {
-	var listAlgos, debug, noPres, noRest, noRetOEP, ctorsHijack, help bool
+	var listAlgos, debug, noPres, noRest, noRetOEP, ctorsHijack, ifuncHijack, help bool
 	var pEnv, oFile, pFile, infectionAlgo string
 
 	flag.BoolVar(&help, "help", false, "see this help menu")
@@ -43,6 +43,7 @@ func main() {
 	flag.StringVar(&infectionAlgo, "infectionAlgo", "TextSegmentPadding", "specify infection algorithm to use")
 	flag.BoolVar(&listAlgos, "listAlgos", false, "list available infection algorithms")
 	flag.BoolVar(&ctorsHijack, "ctorsHijack", false, "Hijack the first constructor in the target to start parasitic execution intead of modifying the OEP")
+	flag.BoolVar(&ifuncHijack, "ifuncHijack", false, "Hijack an IFUNC resolver function for code execution")
 	flag.StringVar(&pEnv, "payloadEnv", "", "name of the environmental variable holding the payload")
 	flag.StringVar(&oFile, "target", "", "path to binary targeted for infection")
 	flag.StringVar(&pFile, "payloadBin", "", "path to binary containing payload")
@@ -106,6 +107,8 @@ func main() {
 		opts |= elfinfect.NoPres
 	case ctorsHijack:
 		opts |= elfinfect.CtorsHijack
+	case ifuncHijack:
+		opts |= elfinfect.IfuncHijack
 	}
 
 	if !((opts & elfinfect.NoPres) == elfinfect.NoPres) {

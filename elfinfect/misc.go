@@ -10,6 +10,7 @@ const (
 	NoRest      InfectOpts = 1 << 6
 	NoRetOEP    InfectOpts = 1 << 5
 	CtorsHijack InfectOpts = 1 << 4
+	IfuncHijack InfectOpts = 1 << 3
 )
 
 func printPayload(p []byte) {

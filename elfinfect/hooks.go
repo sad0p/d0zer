@@ -213,3 +213,8 @@ func (t *TargetBin) withInSectionVirtualAddrSpace(sectionName string, addr inter
 
 	return status
 }
+
+func (t *TargetBin) ifuncHook() error {
+	t.printDebugMsg("[+] IfuncHook requested")
+
+}

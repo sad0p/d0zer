@@ -50,6 +50,10 @@ func (t *TargetBin) TextSegmentPaddingInfection(opts InfectOpts) error {
 				return err
 			}
 
+		} else if (opts & IfuncHijack) == IfuncHijack {
+			if err := t.ifuncHook(); err != nil {
+				return err
+			}
 		} else {
 			t.Hdr.(*elf.Header64).Entry = newEntry
 			t.printDebugMsg(MOD_ENTRY_POINT, oEntry, t.Hdr.(*elf.Header64).Entry)
